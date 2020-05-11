@@ -14,7 +14,8 @@ public class SNSDirectAsyncGateway implements DirectAsyncGateway {
 
   @Override
   public <T> Mono<Void> sendCommand(Command<T> command, String targetName) {
-    return sender.publish(command, targetName);
+    return sender.publish(command, targetName)
+        .onErrorMap(err -> new RuntimeException("Command send failure: " + command.getName(), err));
   }
 
   @Override

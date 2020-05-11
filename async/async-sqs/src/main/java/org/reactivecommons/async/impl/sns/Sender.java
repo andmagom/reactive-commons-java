@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.reactivecommons.api.domain.Command;
 import org.reactivecommons.async.impl.Headers;
 import org.reactivecommons.async.impl.sns.config.SNSProps;
 import reactor.core.publisher.Mono;
@@ -23,16 +22,16 @@ public class Sender {
   private final String sourceApplication;
   private final SNSProps props;
 
-  public <T> Mono<Void> publish(Command<T> command, String targetName) {
-    return getPublishRequest(command, targetName)
+  public <T> Mono<Void> publish(T message, String targetName) {
+    return getPublishRequest(message, targetName)
         .flatMap( request -> Mono.fromFuture( client.publish(request) ))
         .thenEmpty(response -> System.out.println(response));
   }
 
-  private <T> Mono<PublishRequest> getPublishRequest(Command<T> command, String targetName) {
+  private <T> Mono<PublishRequest> getPublishRequest(T message, String targetName) {
     try {
       PublishRequest request = PublishRequest.builder()
-          .message( objectToJSON(command) )
+          .message( objectToJSON(message) )
           .messageAttributes( getMessageAttributes() )
           .topicArn( getTopicARN( targetName ) )
           .build();
@@ -47,9 +46,9 @@ public class Sender {
     return props.getTopicPrefix().concat(":").concat(targetName);
   }
 
-  private <T> String objectToJSON(Command<T> command) throws JsonProcessingException {
+  private <T> String objectToJSON(T message) throws JsonProcessingException {
     ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-    String json = ow.writeValueAsString(command);
+    String json = ow.writeValueAsString(message);
     return json;
   }
 
