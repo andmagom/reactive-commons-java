@@ -1,20 +1,27 @@
-package org.reactivecommons.async.impl.sns;
+package org.reactivecommons.async.impl.sns.communications;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.reactivecommons.async.impl.Headers;
+import org.reactivecommons.async.impl.sns.config.SNSProps;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import software.amazon.awssdk.services.sns.SnsAsyncClient;
+import software.amazon.awssdk.services.sns.model.*;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
+import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlResponse;
+
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
-import org.reactivecommons.async.impl.Headers;
-import org.reactivecommons.async.impl.sns.config.SNSProps;
-import reactor.core.publisher.Mono;
-import software.amazon.awssdk.services.sns.SnsAsyncClient;
-import software.amazon.awssdk.services.sns.model.MessageAttributeValue;
-import software.amazon.awssdk.services.sns.model.PublishRequest;
-
+@Data
 @RequiredArgsConstructor
 public class Sender {
 
@@ -25,7 +32,7 @@ public class Sender {
   public <T> Mono<Void> publish(T message, String targetName) {
     return getPublishRequest(message, targetName)
         .flatMap( request -> Mono.fromFuture( client.publish(request) ))
-        .thenEmpty(response -> System.out.println(response));
+        .thenEmpty(System.out::println);
   }
 
   private <T> Mono<PublishRequest> getPublishRequest(T message, String targetName) {
@@ -35,7 +42,6 @@ public class Sender {
           .messageAttributes( getMessageAttributes() )
           .topicArn( getTopicARN( targetName ) )
           .build();
-
       return Mono.just(request);
     } catch (JsonProcessingException e) {
       return Mono.error(e);
@@ -43,7 +49,7 @@ public class Sender {
   }
 
   private String getTopicARN(String targetName) {
-    return props.getTopicPrefix().concat(":").concat(targetName);
+    return props.getTopicPrefix();
   }
 
   private <T> String objectToJSON(T message) throws JsonProcessingException {

@@ -1,10 +1,9 @@
 package org.reactivecommons.async.impl;
 
-import java.util.Collections;
 import lombok.RequiredArgsConstructor;
 import org.reactivecommons.api.domain.DomainEvent;
 import org.reactivecommons.api.domain.DomainEventBus;
-import org.reactivecommons.async.impl.sns.Sender;
+import org.reactivecommons.async.impl.sns.communications.Sender;
 import reactor.core.publisher.Mono;
 
 @RequiredArgsConstructor
