@@ -8,15 +8,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.reactivecommons.async.impl.Headers;
 import org.reactivecommons.async.impl.sns.config.SNSProps;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
 import software.amazon.awssdk.services.sns.model.*;
-import software.amazon.awssdk.services.sqs.SqsAsyncClient;
-import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
-import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
-import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
-import software.amazon.awssdk.services.sqs.model.GetQueueUrlResponse;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -51,8 +45,8 @@ public class Sender {
     }
   }
 
-  private String getTopicARN(String targetName) {
-    return props.getTopicPrefix();
+  private String getTopicARN(String topicName) {
+    return props.getTopicPrefix() + ":" + topicName;
   }
 
   private <T> String objectToJSON(T message) throws JsonProcessingException {
