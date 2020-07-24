@@ -16,7 +16,7 @@ public class SNSDomainEventBus implements DomainEventBus {
   @Override
   public <T> Mono<Void> emit(DomainEvent<T> event) {
     return sender.publish(event, topic)
-        .onErrorMap(err -> new RuntimeException("Event send failure: " + event.getName(), err));
+        .onErrorMap(err -> new RuntimeException("Event send failure: " + event.getName() + " Reason: "+ err.getMessage(), err));
   }
 
 }

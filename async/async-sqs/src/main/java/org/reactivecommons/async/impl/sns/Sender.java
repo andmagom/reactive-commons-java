@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.java.Log;
 import org.reactivecommons.async.impl.Headers;
 import org.reactivecommons.async.impl.sns.config.SNSProps;
 import reactor.core.publisher.Mono;
@@ -16,6 +17,7 @@ import software.amazon.awssdk.services.sns.model.MessageAttributeValue;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 
 @RequiredArgsConstructor
+@Log
 public class Sender {
 
   private final SnsAsyncClient client;
@@ -25,7 +27,8 @@ public class Sender {
   public <T> Mono<Void> publish(T message, String targetName) {
     return getPublishRequest(message, targetName)
         .flatMap( request -> Mono.fromFuture( client.publish(request) ))
-        .thenEmpty(response -> System.out.println(response));
+        .doOnSuccess(response -> log.info(response.messageId()))
+        .then();
   }
 
   private <T> Mono<PublishRequest> getPublishRequest(T message, String targetName) {
