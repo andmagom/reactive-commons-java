@@ -55,8 +55,7 @@ public class RabbitMqConfig {
     @Bean
     public ReactiveMessageSender messageSender(ConnectionFactoryProvider provider, MessageConverter converter,
                                                BrokerConfigProps brokerConfigProps, RabbitProperties rabbitProperties) {
-        final Mono<Connection> senderConnection =
-                createConnectionMono(provider.getConnectionFactory(), appName, SENDER_TYPE);
+        final Mono<Connection> senderConnection =         createConnectionMono(provider.getConnectionFactory(), appName, SENDER_TYPE);
         final ChannelPoolOptions channelPoolOptions = new ChannelPoolOptions();
         final PropertyMapper map = PropertyMapper.get();
 
