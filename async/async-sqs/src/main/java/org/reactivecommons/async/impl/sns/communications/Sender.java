@@ -45,8 +45,8 @@ public class Sender {
     }
   }
 
-  private String getTopicARN(String topicName) {
-    return props.getTopicPrefix() + ":" + topicName;
+  private String getTopicARN(String targetTopic) {
+    return props.getTopicPrefix() + ":" +targetTopic;
   }
 
   private <T> String objectToJSON(T message) throws JsonProcessingException {
