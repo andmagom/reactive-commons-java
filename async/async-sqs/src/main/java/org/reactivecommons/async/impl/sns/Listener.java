@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 
@@ -25,7 +26,7 @@ public class Listener {
     return getMessages(queueName)
         .flatMap(this::mapObject)
         .flatMap((tuple)->handleMessage(tuple,f))
-        .map((a)->deleteMessage(queueName,a))
+        .flatMap((a)->deleteMessage(queueName,a))
         .then();
   }
 
@@ -46,15 +47,14 @@ public class Listener {
       }
   }
 
-  public Mono deleteMessage(String queueName,Tuple2<Message,Mono> tuple){
+  public Mono<DeleteMessageResponse> deleteMessage(String queueName, Tuple2<Message,Mono> tuple){
       DeleteMessageRequest deleteMessageRequest = getDeleteMessageRequest(queueName,tuple.getT1().receiptHandle());
-      Mono.fromFuture(client.deleteMessage(deleteMessageRequest))
+      return Mono.fromFuture(client.deleteMessage(deleteMessageRequest))
               .doOnSuccess(response -> log.info("Deleted Message: " + response.hashCode()))
               .doOnError((e) -> {
                   log.warning(e.getMessage());
-              })
-              .subscribe();
-      return tuple.getT2();
+              });
+
   }
 
 
