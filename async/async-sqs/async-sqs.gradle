@@ -80,6 +80,7 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.13.10')
     compile project(":async-commons-api")
     compile project(":domain-events-api")
+    compile project(":async-commons")
 
     api 'io.projectreactor:reactor-core'
     api 'com.fasterxml.jackson.core:jackson-databind'

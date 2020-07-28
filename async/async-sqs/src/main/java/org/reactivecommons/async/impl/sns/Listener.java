@@ -17,7 +17,7 @@ public class Listener {
   private final SqsAsyncClient client;
   private final SNSProps props;
 
-  public Mono<Void> listen(String queueName, GenericHandler f) {
+  public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> f) {
     return Mono.fromFuture(
         client.receiveMessage(request -> request
             .queueUrl(queueName)
@@ -39,7 +39,7 @@ public class Listener {
         })
         .flatMap(event -> {
           SNSEventModel e = (SNSEventModel) event;
-          return f.handle(e.getMessage());
+          return f.handle(e);
         })
         .then();
   }

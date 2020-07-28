@@ -8,7 +8,7 @@ import org.reactivecommons.async.api.handlers.registered.RegisteredEventListener
 import org.reactivecommons.async.api.handlers.registered.RegisteredQueryHandler;
 
 @RequiredArgsConstructor
-public class HandlerResolver {
+public class Handlers {
   private final Map<String, RegisteredQueryHandler> queryHandlers;
   private final Map<String, RegisteredEventListener> eventListeners;
   private final Map<String, RegisteredCommandHandler> commandHandlers;

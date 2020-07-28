@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 public class SNSDirectAsyncGateway implements DirectAsyncGateway {
 
   private Sender sender;
+  public final static String TOPIC_COMMANDS = "DirectMessage";
 
   @Override
   public <T> Mono<Void> sendCommand(Command<T> command, String targetName) {
