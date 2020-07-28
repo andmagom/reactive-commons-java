@@ -8,6 +8,7 @@ import org.reactivecommons.async.api.handlers.GenericHandler;
 import org.reactivecommons.async.impl.sns.config.SNSProps;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
@@ -22,24 +23,40 @@ public class Listener {
 
   public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> f) {
     return getMessages(queueName)
-        .flatMap(message -> {
-          ObjectMapper objectMapper = new ObjectMapper();
-          try {
-            return Mono.zip(Mono.just(objectMapper.readValue(message.body(), SNSEventModel.class)),Mono.just(message));
-          } catch (JsonProcessingException ex) {
-            return Flux.error(ex);
-          }
-        })
-        .flatMap((tuple)->Mono.zip(Mono.just(tuple.getT2()),f.handle(tuple.getT1())))
-        .flatMap((a)->{
-            DeleteMessageRequest deleteMessageRequest = getdeleteMessageRequest(queueName,a.getT1().receiptHandle());
-            Mono.fromFuture(client.deleteMessage(deleteMessageRequest)).subscribe((res)->{
-                System.out.println("Respuesta: "+res.toString());
-            });
-            System.out.println("Mensaje eliminado: "+a.getT1().receiptHandle());
-            return a.getT2();
-        }).then();
+        .flatMap(this::mapObject)
+        .flatMap((tuple)->handleMessage(tuple,f))
+        .map((a)->deleteMessage(queueName,a))
+        .then();
   }
+
+
+  public Mono<Tuple2<Message,Mono>> handleMessage(Tuple2<SNSEventModel,Message> tuple, GenericHandler<Mono, SNSEventModel> f){
+      Mono processedMessage = f.handle(tuple.getT1());
+      Mono<Message> originalMessage = Mono.just(tuple.getT2());
+      return Mono.zip(originalMessage,processedMessage);
+  }
+
+
+  public Mono<Tuple2<SNSEventModel, Message>> mapObject(Message message){
+      ObjectMapper objectMapper = new ObjectMapper();
+      try {
+          return Mono.zip(Mono.just(objectMapper.readValue(message.body(), SNSEventModel.class)),Mono.just(message));
+      } catch (JsonProcessingException ex) {
+          return Mono.error(ex);
+      }
+  }
+
+  public Mono deleteMessage(String queueName,Tuple2<Message,Mono> tuple){
+      DeleteMessageRequest deleteMessageRequest = getDeleteMessageRequest(queueName,tuple.getT1().receiptHandle());
+      Mono.fromFuture(client.deleteMessage(deleteMessageRequest))
+              .doOnSuccess(response -> log.info("Deleted Message: " + response.hashCode()))
+              .doOnError((e) -> {
+                  log.warning(e.getMessage());
+              })
+              .subscribe();
+      return tuple.getT2();
+  }
+
 
   public Flux<Message> getMessages(String queueName){
 
@@ -58,7 +75,7 @@ public class Listener {
       return Mono.just(ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20).build());
   }
 
-  public DeleteMessageRequest getdeleteMessageRequest(String queueName, String receiptHandle){
+  public DeleteMessageRequest getDeleteMessageRequest(String queueName, String receiptHandle){
       return DeleteMessageRequest.builder().queueUrl(queueName).receiptHandle(receiptHandle).build();
   }
 
