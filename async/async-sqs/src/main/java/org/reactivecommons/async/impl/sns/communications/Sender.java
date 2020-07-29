@@ -23,7 +23,7 @@ public class Sender {
 
   private final SnsAsyncClient client;
   private final String sourceApplication;
-  private final SNSProps props;
+  private final String prefixARN;
 
   public <T> Mono<Void> publish(T message, String targetName) {
     return getPublishRequest(message, targetName)
@@ -46,7 +46,7 @@ public class Sender {
   }
 
   private String getTopicARN(String targetTopic) {
-    return props.getTopicPrefix() + ":" +targetTopic;
+    return prefixARN + ":" +targetTopic;
   }
 
   private <T> String objectToJSON(T message) throws JsonProcessingException {

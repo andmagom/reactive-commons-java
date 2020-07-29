@@ -10,11 +10,11 @@ import reactor.core.publisher.Mono;
 public class SNSDomainEventBus implements DomainEventBus {
 
   private final Sender sender;
-  public final static String TOPIC_EVENTS = "DomainEvents";
+  public final  String topicName ;
 
   @Override
   public <T> Mono<Void> emit(DomainEvent<T> event) {
-    return sender.publish(event, TOPIC_EVENTS)
+    return sender.publish(event, topicName)
         .onErrorMap(err -> new RuntimeException("Event send failure: " + event.getName() + " Reason: "+ err.getMessage(), err));
   }
 

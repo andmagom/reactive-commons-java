@@ -20,7 +20,6 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 public class Listener {
 
   private final SqsAsyncClient client;
-  private final SNSProps props;
 
   public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> f) {
     return getMessages(queueName)
@@ -29,7 +28,6 @@ public class Listener {
         .flatMap((a)->deleteMessage(queueName,a))
         .then();
   }
-
 
   public Mono<Tuple2<Message,Mono>> handleMessage(Tuple2<SNSEventModel,Message> tuple, GenericHandler<Mono, SNSEventModel> f){
       Mono processedMessage = f.handle(tuple.getT1());
@@ -57,7 +55,6 @@ public class Listener {
 
   }
 
-
   public Flux<Message> getMessages(String queueName){
 
       return getReceiveMessageRequest(queueName)
@@ -79,11 +76,10 @@ public class Listener {
       return DeleteMessageRequest.builder().queueUrl(queueName).receiptHandle(receiptHandle).build();
   }
 
-  /*
-   client.deleteMessage((builder) -> builder
-              .queueUrl(queueName)
-              .receiptHandle(tuple.getT1().receiptHandle())
-          );
-   */
+  public Mono<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> f) {
+    return listen(queueName, f)
+        .repeat()
+        .then();
+  }
 
 }
