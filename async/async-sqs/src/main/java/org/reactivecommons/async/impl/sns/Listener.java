@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.reactivecommons.async.api.handlers.GenericHandler;
-import org.reactivecommons.async.impl.sns.config.SNSProps;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
@@ -56,7 +55,6 @@ public class Listener {
   }
 
   public Flux<Message> getMessages(String queueName){
-
       return getReceiveMessageRequest(queueName)
             .flatMap((req)->Mono.fromFuture(client.receiveMessage(req))
                     .doOnSuccess(response -> log.info("Size: " + response.messages().size()))
@@ -69,6 +67,7 @@ public class Listener {
   }
 
   public Mono<ReceiveMessageRequest> getReceiveMessageRequest(String name){
+      log.info("Getting messages from " + name);
       return Mono.just(ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20).build());
   }
 
@@ -78,7 +77,6 @@ public class Listener {
 
   public Mono<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> f) {
     return listen(queueName, f)
-        .repeat()
         .then();
   }
 

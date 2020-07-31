@@ -6,7 +6,6 @@ import lombok.extern.java.Log;
 import org.reactivecommons.api.domain.DomainEvent;
 import org.reactivecommons.async.api.handlers.registered.RegisteredEventListener;
 import org.reactivecommons.async.impl.HandlerResolver;
-import org.reactivecommons.async.impl.Handlers;
 import org.reactivecommons.async.impl.converters.MessageConverter;
 import org.reactivecommons.async.impl.model.MessageSQS;
 import org.reactivecommons.async.impl.sns.SNSEventModel;
@@ -36,7 +35,7 @@ public class ApplicationEventListener extends GenericMessageListener {
 
   public Mono handle(SNSEventModel msj) {
     return getHandler(msj)
-        .map(handler -> {
+        .flatMap(handler -> {
           Class dataClass = handler.getInputClass();
           MessageSQS message = new MessageSQS(msj.getMessage());
           DomainEvent<Object> domainEvent = messageConverter.readDomainEvent(message, dataClass);

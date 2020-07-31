@@ -34,7 +34,7 @@ public class ApplicationCommandListener extends GenericMessageListener {
 
   public Mono handle(SNSEventModel msj) {
     return getHandler(msj)
-            .map(handler -> {
+            .flatMap(handler -> {
               Class dataClass = handler.getInputClass();
               MessageSQS message = new MessageSQS(msj.getMessage());
               Command<Object> command = messageConverter.readCommand(message, dataClass);

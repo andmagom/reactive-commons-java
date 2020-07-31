@@ -1,5 +1,6 @@
 package org.reactivecommons.async.impl.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.reactivecommons.async.api.DefaultCommandHandler;
 import org.reactivecommons.async.api.DefaultQueryHandler;
@@ -15,6 +16,7 @@ import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
 import org.reactivecommons.async.impl.communications.ReactiveMessageSender;
 import org.reactivecommons.async.impl.config.props.AsyncProps;
 import org.reactivecommons.async.impl.converters.MessageConverter;
+import org.reactivecommons.async.impl.converters.json.JacksonMessageConverter;
 import org.reactivecommons.async.impl.listeners.ApplicationCommandListener;
 import org.reactivecommons.async.impl.listeners.ApplicationEventListener;
 import org.reactivecommons.async.impl.listeners.ApplicationQueryListener;
@@ -34,7 +36,6 @@ import java.util.concurrent.ConcurrentMap;
 
 @Configuration
 @RequiredArgsConstructor
-@Import(AWSConfig.class)
 public class MessageListenersConfig {
 
     @Value("${spring.application.name}")
@@ -86,6 +87,13 @@ public class MessageListenersConfig {
                 return handler != null ? handler : new RegisteredCommandHandler<>("", defaultCommandHandler, Object.class);
             }
         };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MessageConverter messageConverter() {
+        ObjectMapper mapper = new ObjectMapper();
+        return new JacksonMessageConverter(mapper);
     }
 
     @Bean
