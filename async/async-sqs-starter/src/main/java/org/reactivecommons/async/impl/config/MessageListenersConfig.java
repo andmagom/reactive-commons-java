@@ -1,31 +1,24 @@
 package org.reactivecommons.async.impl.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.reactivecommons.async.api.DefaultCommandHandler;
 import org.reactivecommons.async.api.DefaultQueryHandler;
-import org.reactivecommons.async.api.DynamicRegistry;
 import org.reactivecommons.async.api.HandlerRegistry;
 import org.reactivecommons.async.api.handlers.registered.RegisteredCommandHandler;
 import org.reactivecommons.async.api.handlers.registered.RegisteredEventListener;
 import org.reactivecommons.async.api.handlers.registered.RegisteredQueryHandler;
-import org.reactivecommons.async.impl.DiscardNotifier;
-import org.reactivecommons.async.impl.DynamicRegistryImp;
 import org.reactivecommons.async.impl.HandlerResolver;
-import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
-import org.reactivecommons.async.impl.communications.ReactiveMessageSender;
 import org.reactivecommons.async.impl.config.props.AsyncProps;
 import org.reactivecommons.async.impl.converters.MessageConverter;
-import org.reactivecommons.async.impl.listeners.ApplicationCommandListener;
-import org.reactivecommons.async.impl.listeners.ApplicationEventListener;
-import org.reactivecommons.async.impl.listeners.ApplicationQueryListener;
-import org.reactivecommons.async.impl.sns.Listener;
+import org.reactivecommons.async.impl.converters.json.JacksonMessageConverter;
+import org.reactivecommons.async.impl.handlers.ApplicationCommandHandler;
+import org.reactivecommons.async.impl.handlers.ApplicationEventHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
@@ -34,7 +27,6 @@ import java.util.concurrent.ConcurrentMap;
 
 @Configuration
 @RequiredArgsConstructor
-@Import(AWSConfig.class)
 public class MessageListenersConfig {
 
     @Value("${spring.application.name}")
@@ -44,15 +36,15 @@ public class MessageListenersConfig {
 
 
     @Bean //TODO: move to own config (QueryListenerConfig)
-    public ApplicationEventListener eventListener(HandlerResolver resolver, MessageConverter messageConverter) {
-        final ApplicationEventListener appListener = new ApplicationEventListener(resolver, messageConverter);
+    public ApplicationEventHandler eventListener(HandlerResolver resolver, MessageConverter messageConverter) {
+        final ApplicationEventHandler appListener = new ApplicationEventHandler(resolver, messageConverter);
 
         return appListener;
     }
 
     @Bean
-    public ApplicationCommandListener applicationCommandListener(HandlerResolver resolver, MessageConverter messageConverter) {
-        ApplicationCommandListener commandListener = new ApplicationCommandListener(resolver, messageConverter);
+    public ApplicationCommandHandler applicationCommandListener(HandlerResolver resolver, MessageConverter messageConverter) {
+        ApplicationCommandHandler commandListener = new ApplicationCommandHandler(resolver, messageConverter);
         return commandListener;
     }
 
@@ -86,6 +78,13 @@ public class MessageListenersConfig {
                 return handler != null ? handler : new RegisteredCommandHandler<>("", defaultCommandHandler, Object.class);
             }
         };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MessageConverter messageConverter() {
+        ObjectMapper mapper = new ObjectMapper();
+        return new JacksonMessageConverter(mapper);
     }
 
     @Bean

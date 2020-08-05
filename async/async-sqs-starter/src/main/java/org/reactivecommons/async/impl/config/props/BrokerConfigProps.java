@@ -20,7 +20,7 @@ public class BrokerConfigProps implements IBrokerConfigProps {
   @Value("${spring.application.name}")
   private String appName;
 
-  @Value("${spring.application.project.name}")
+  @Value("${spring.application.project-name}")
   private String projectName;
 
   private final AsyncProps asyncProps;

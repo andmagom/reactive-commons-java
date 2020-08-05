@@ -1,20 +1,17 @@
 package org.reactivecommons.async.impl.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.reactivecommons.api.domain.DomainEventBus;
 import org.reactivecommons.async.impl.SNSDomainEventBus;
 import org.reactivecommons.async.impl.config.props.AsyncProps;
 import org.reactivecommons.async.impl.config.props.BrokerConfigProps;
-import org.reactivecommons.async.impl.converters.MessageConverter;
-import org.reactivecommons.async.impl.converters.json.JacksonMessageConverter;
-import org.reactivecommons.async.impl.listeners.ApplicationCommandListener;
-import org.reactivecommons.async.impl.listeners.ApplicationEventListener;
-import org.reactivecommons.async.impl.sns.Listener;
+import org.reactivecommons.async.impl.handlers.ApplicationCommandHandler;
+import org.reactivecommons.async.impl.handlers.ApplicationEventHandler;
+import org.reactivecommons.async.impl.sns.communications.Listener;
 import org.reactivecommons.async.impl.sns.communications.Sender;
+import org.reactivecommons.async.impl.sns.communications.TopologyCreator;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,27 +43,24 @@ public class AWSConfig {
         return sender;
     }
 
-    @Bean("eventListener")
-    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventListener appEvtListener) {
+    @Bean("evtListener")
+    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
-        listener.startListener("queueCommand", appEvtListener::handle);
+        String queueName = props.getEventsQueue();
+        String queueUrl = topoloy.getQueueUrl(queueName).block();
+        listener.startListener(queueUrl, appEvtListener::handle).subscribe();
         return listener;
     }
 
     @Bean("commandListener")
-    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandListener appCmdListener) {
+    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
-        listener.startListener("queueCommand", appCmdListener::handle);
+        String queueName = props.getCommandsQueue();
+        topoloy.createQueue(queueName).block();
+        String queueUrl = topoloy.getQueueUrl(queueName).block();
+        listener.startListener(queueUrl, appCmdListener::handle).subscribe();
         return listener;
     }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public MessageConverter messageConverter() {
-        ObjectMapper mapper = new ObjectMapper();
-        return new JacksonMessageConverter(mapper);
-    }
-
 
     private DomainEventBus domainEventBus(Sender sender, BrokerConfigProps props) {
         final String exchangeName = props.getDomainEventsExchangeName();
@@ -89,6 +83,11 @@ public class AWSConfig {
             .region(region)
             .credentialsProvider(DefaultCredentialsProvider.create())
             .build();
+    }
+
+    @Bean
+    public TopologyCreator getTopology(SqsAsyncClient sqsAsyncClient, SnsAsyncClient snsAsyncClient) {
+        return new TopologyCreator(snsAsyncClient, sqsAsyncClient);
     }
 
 

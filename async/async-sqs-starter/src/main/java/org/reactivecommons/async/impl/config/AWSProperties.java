@@ -11,7 +11,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
-@ConfigurationProperties(prefix = "spring.reactive.aws")
+@ConfigurationProperties(prefix = "aws")
 @Data
 public class AWSProperties {
     private String prefixARN;
