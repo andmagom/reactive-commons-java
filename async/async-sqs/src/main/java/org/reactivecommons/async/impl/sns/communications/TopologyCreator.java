@@ -1,24 +1,25 @@
 package org.reactivecommons.async.impl.sns.communications;
 
+import lombok.AllArgsConstructor;
+import lombok.extern.java.Log;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
 import software.amazon.awssdk.services.sns.model.*;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.*;
-import software.amazon.awssdk.services.sqs.model.AddPermissionRequest;
 
-import java.util.concurrent.CompletableFuture;
+import java.util.HashMap;
+import java.util.Map;
 
+@Log
+@AllArgsConstructor
 public class TopologyCreator {
 
     private final SnsAsyncClient topicClient;
     private final SqsAsyncClient queueClient;
-
-    public TopologyCreator(SnsAsyncClient topicClient,SqsAsyncClient queueClient){
-        this.topicClient = topicClient;
-        this.queueClient = queueClient;
-    }
+    private final String arnSnsPrefix;
+    private final String arnSqsPrefix;
 
     public Mono<String> declareTopic(String name){
         return listTopics()
@@ -56,7 +57,12 @@ public class TopologyCreator {
     public Mono<String> createQueue(String name){
         return createQueueRequest(name)
                 .flatMap(request->Mono.fromFuture(queueClient.createQueue(request)))
-                .map(CreateQueueResponse::toString);
+                .map(CreateQueueResponse::toString)
+                .onErrorMap((e)-> {
+                            log.info(e.getMessage());
+                            return e;
+                        }
+                );
     }
 
 
@@ -114,14 +120,73 @@ public class TopologyCreator {
 
     }
 
-    private Mono<AddPermissionRequest> getAddPermisionRequest(String queueArn) {
-        AddPermissionRequest subscribeRequest = AddPermissionRequest.builder()
-                .queueUrl(queueArn)
-                .actions("*")
-                .build();
-        return Mono.just(subscribeRequest);
+
+    public Mono<String> setQueueAttributes(String queueName,String topicName){
+        return getQueueUrl(queueName)
+                .flatMap((queueUrl)->{
+                    Map <String,String> attributes = getAttributeMap(queueName,topicName);
+                    return setQueueAttributesRequest(queueUrl,attributes);
+                })
+                .flatMap(request->Mono.fromFuture(queueClient.setQueueAttributes(request)))
+                .map(SetQueueAttributesResponse::toString);
+
     }
 
+
+
+   /* map.put("Policy","{\n" +
+            "  \"Version\": \"2012-10-17\",\n" +
+            "  \"Id\": \"arn:aws:sqs:us-east-1:912087074172:prueba24/SQSDefaultPolicy\",\n" +
+            "  \"Statement\": [\n" +
+            "    {\n" +
+            "      \"Sid\": \"topic-subscription-arn:aws:sns:us-east-1:912087074172:dynamodb2\",\n" +
+            "      \"Effect\": \"Allow\",\n" +
+            "      \"Principal\": {\n" +
+            "        \"AWS\": \"*\"\n" +
+            "      },\n" +
+            "      \"Action\": \"SQS:SendMessage\",\n" +
+            "      \"Resource\": \"arn:aws:sqs:us-east-1:912087074172:prueba24\",\n" +
+            "      \"Condition\": {\n" +
+            "        \"ArnLike\": {\n" +
+            "          \"aws:SourceArn\": \"arn:aws:sns:us-east-1:912087074172:dynamodb2\"\n" +
+            "        }\n" +
+            "      }\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}");*/
+
+    private Map<String,String> getAttributeMap(String queueName,String topicName){
+        Map<String,String> map = new HashMap<>();
+        map.put("Policy","{\n" +
+                "  \"Version\": \"2012-10-17\",\n" +
+                "  \"Id\": \""+arnSqsPrefix+":"+queueName+"/SQSDefaultPolicy\",\n" +
+                "  \"Statement\": [\n" +
+                "    {\n" +
+                "      \"Sid\": \"topic-subscription-"+arnSnsPrefix+":"+topicName+"\",\n" +
+                "      \"Effect\": \"Allow\",\n" +
+                "      \"Principal\": {\n" +
+                "        \"AWS\": \"*\"\n" +
+                "      },\n" +
+                "      \"Action\": \"SQS:SendMessage\",\n" +
+                "      \"Resource\": \""+arnSqsPrefix+":"+queueName+"\",\n" +
+                "      \"Condition\": {\n" +
+                "        \"ArnLike\": {\n" +
+                "          \"aws:SourceArn\": \""+arnSnsPrefix+":"+topicName+"\"\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}");
+        return map;
+    }
+
+
+    private Mono<SetQueueAttributesRequest> setQueueAttributesRequest(String queueUrl, Map<String,String> attributes) {
+        SetQueueAttributesRequest setQueueAttributesRequest = SetQueueAttributesRequest.builder().queueUrl(queueUrl)
+                .attributesWithStrings(attributes)
+                .build();
+        return Mono.just(setQueueAttributesRequest);
+    }
 
     public static class TopologyDefException extends RuntimeException {
         public TopologyDefException(Throwable cause) {
