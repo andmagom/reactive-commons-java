@@ -47,7 +47,9 @@ public class TopologyCreator {
     public Mono<String> createTopic(String name){
         return getCreateTopicRequest(name)
                 .flatMap(request->Mono.fromFuture(topicClient.createTopic(request)))
-                .map(CreateTopicResponse::toString);
+                .map(CreateTopicResponse::toString)
+                .doOnNext((response) -> log.fine(response))
+                .doOnError((e) -> log.severe(e.toString()));
     }
 
 
@@ -76,7 +78,6 @@ public class TopologyCreator {
     }
 
     public Mono<String> getQueueUrl(String name){
-
         return getQueueUrlRequest(name)
                 .flatMap((request)->Mono.fromFuture(queueClient.getQueueUrl(request)))
                 .map(GetQueueUrlResponse::queueUrl);

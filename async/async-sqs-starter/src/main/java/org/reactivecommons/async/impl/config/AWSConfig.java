@@ -2,8 +2,6 @@ package org.reactivecommons.async.impl.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
-import org.reactivecommons.api.domain.DomainEventBus;
-import org.reactivecommons.async.impl.SNSDomainEventBus;
 import org.reactivecommons.async.impl.config.props.AsyncProps;
 import org.reactivecommons.async.impl.config.props.BrokerConfigProps;
 import org.reactivecommons.async.impl.handlers.ApplicationCommandHandler;
@@ -44,9 +42,11 @@ public class AWSConfig {
     }
 
     @Bean("evtListener")
-    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener, BrokerConfigProps props, TopologyCreator topoloy) {
+    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener,
+        BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         String queueName = props.getEventsQueue();
+        topoloy.createQueue(queueName).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appEvtListener::handle).subscribe();
         return listener;
@@ -56,15 +56,11 @@ public class AWSConfig {
     public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         String queueName = props.getCommandsQueue();
+        topoloy.createTopic(props.getDirectMessagesExchangeName()).block();
         topoloy.createQueue(queueName).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appCmdListener::handle).subscribe();
         return listener;
-    }
-
-    private DomainEventBus domainEventBus(Sender sender, BrokerConfigProps props) {
-        final String exchangeName = props.getDomainEventsExchangeName();
-        return new SNSDomainEventBus(sender, exchangeName);
     }
 
     @Bean

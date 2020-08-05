@@ -63,7 +63,7 @@ public class BrokerConfigProps implements IBrokerConfigProps {
 
   @Override
   public String getDirectMessagesExchangeName() {
-    return projectName + "-" + asyncProps.getDirect().getTopic();
+    return appName + "-" + projectName + "-" + asyncProps.getDirect().getTopic();
   }
 
   private String newRandomQueueName() {
