@@ -20,64 +20,69 @@ public class Listener {
 
   private final SqsAsyncClient client;
 
-  public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> f) {
+  public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> handler) {
     return getMessages(queueName)
         .flatMap(this::mapObject)
-        .flatMap((tuple)->handleMessage(tuple,f))
-        .flatMap((a)->deleteMessage(queueName,a))
+        .flatMap(tuple -> handleMessage(tuple, handler))
+        .flatMap(message -> deleteMessage(queueName, message))
         .then();
   }
 
-  public Mono<Tuple2<Message,Mono>> handleMessage(Tuple2<SNSEventModel,Message> tuple, GenericHandler<Mono, SNSEventModel> f){
-      Mono processedMessage = f.handle(tuple.getT1());
-      Mono<Message> originalMessage = Mono.just(tuple.getT2());
-      return Mono.zip(originalMessage,processedMessage);
+  public Mono<Message> handleMessage(Tuple2<SNSEventModel, Message> tuple,
+      GenericHandler<Mono, SNSEventModel> f) {
+    f.handle(tuple.getT1()).subscribe();
+    Mono<Message> originalMessage = Mono.just(tuple.getT2());
+    return originalMessage;
   }
 
 
-  public Mono<Tuple2<SNSEventModel, Message>> mapObject(Message message){
-      ObjectMapper objectMapper = new ObjectMapper();
-      try {
-          return Mono.zip(Mono.just(objectMapper.readValue(message.body(), SNSEventModel.class)),Mono.just(message));
-      } catch (JsonProcessingException ex) {
-          return Mono.error(ex);
-      }
+  public Mono<Tuple2<SNSEventModel, Message>> mapObject(Message message) {
+    ObjectMapper objectMapper = new ObjectMapper();
+    try {
+      return Mono.zip(Mono.just(objectMapper.readValue(message.body(), SNSEventModel.class)),
+          Mono.just(message));
+    } catch (JsonProcessingException ex) {
+      return Mono.error(ex);
+    }
   }
 
-  public Mono<DeleteMessageResponse> deleteMessage(String queueName, Tuple2<Message,Mono> tuple){
-      DeleteMessageRequest deleteMessageRequest = getDeleteMessageRequest(queueName,tuple.getT1().receiptHandle());
-      return Mono.fromFuture(client.deleteMessage(deleteMessageRequest))
-              .doOnSuccess(response -> log.info("Deleted Message: " + response.hashCode()))
-              .doOnError((e) -> {
-                  log.warning(e.getMessage());
-              });
-
-  }
-
-  public Flux<Message> getMessages(String queueName){
-      return getReceiveMessageRequest(queueName)
-            .flatMap((req)->Mono.fromFuture(client.receiveMessage(req))
-                    .doOnSuccess(response -> log.info("Size: " + response.messages().size()))
-                    .doOnError((e) -> {
-                        System.out.println(e.getMessage());
-                    })
-            )
-            .flatMapMany((response)->Flux.fromIterable(response.messages()));
+  public Mono<DeleteMessageResponse> deleteMessage(String queueName, Message m) {
+    DeleteMessageRequest deleteMessageRequest = getDeleteMessageRequest(queueName,
+        m.receiptHandle());
+    return Mono.fromFuture(client.deleteMessage(deleteMessageRequest))
+        .doOnSuccess(response -> log.info("Deleted Message: " + response.hashCode()))
+        .doOnError((e) -> {
+          log.warning(e.getMessage());
+        });
 
   }
 
-  public Mono<ReceiveMessageRequest> getReceiveMessageRequest(String name){
-      log.info("Getting messages from " + name);
-      return Mono.just(ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20).build());
+  public Flux<Message> getMessages(String queueName) {
+    return getReceiveMessageRequest(queueName)
+        .flatMap((req) -> Mono.fromFuture(client.receiveMessage(req))
+            .doOnSuccess(response -> log.info("Size: " + response.messages().size()))
+            .doOnError((e) -> {
+              System.out.println(e.getMessage());
+            })
+        )
+        .flatMapMany((response) -> Flux.fromIterable(response.messages()));
+
   }
 
-  public DeleteMessageRequest getDeleteMessageRequest(String queueName, String receiptHandle){
-      return DeleteMessageRequest.builder().queueUrl(queueName).receiptHandle(receiptHandle).build();
+  public Mono<ReceiveMessageRequest> getReceiveMessageRequest(String name) {
+    log.info("Getting messages from " + name);
+    return Mono.just(
+        ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20)
+            .build());
   }
 
-  public Mono<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> f) {
-    return listen(queueName, f)
-        .then();
+  public DeleteMessageRequest getDeleteMessageRequest(String queueName, String receiptHandle) {
+    return DeleteMessageRequest.builder().queueUrl(queueName).receiptHandle(receiptHandle).build();
+  }
+
+  public Flux<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> handler) {
+    return listen(queueName, handler)
+        .repeat();
   }
 
 }

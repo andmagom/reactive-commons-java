@@ -1,5 +1,6 @@
 package org.reactivecommons.async.impl.sns.communications;
 
+import lombok.extern.java.Log;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
@@ -10,6 +11,7 @@ import software.amazon.awssdk.services.sqs.model.AddPermissionRequest;
 
 import java.util.concurrent.CompletableFuture;
 
+@Log
 public class TopologyCreator {
 
     private final SnsAsyncClient topicClient;
@@ -56,7 +58,9 @@ public class TopologyCreator {
     public Mono<String> createQueue(String name){
         return createQueueRequest(name)
                 .flatMap(request->Mono.fromFuture(queueClient.createQueue(request)))
-                .map(CreateQueueResponse::toString);
+                .map(CreateQueueResponse::toString)
+                .doOnNext((response) -> log.fine(response))
+                .doOnError((e) -> log.severe(e.toString()));
     }
 
 

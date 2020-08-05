@@ -27,7 +27,12 @@ public class ApplicationEventListener extends GenericMessageListener {
       DomainEvent event = objectMapper.readValue(msj.getMessage(), DomainEvent.class);
       String eventName = event.getName();
       RegisteredEventListener handler = handlers.getEventListener(eventName);
-      return Mono.just(handler);
+      if (handler != null) {
+        return Mono.just(handler);
+      } else {
+        log.info("Handler doesn't found for event " + eventName);
+        return Mono.empty();
+      }
     } catch (JsonProcessingException e) {
       return Mono.error(e);
     }
