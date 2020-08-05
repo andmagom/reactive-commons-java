@@ -1,4 +1,4 @@
-package org.reactivecommons.async.impl.sns;
+package org.reactivecommons.async.impl.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;

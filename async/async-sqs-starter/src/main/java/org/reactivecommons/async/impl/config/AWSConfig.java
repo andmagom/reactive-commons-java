@@ -1,15 +1,14 @@
 package org.reactivecommons.async.impl.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.reactivecommons.api.domain.DomainEventBus;
 import org.reactivecommons.async.impl.SNSDomainEventBus;
 import org.reactivecommons.async.impl.config.props.AsyncProps;
 import org.reactivecommons.async.impl.config.props.BrokerConfigProps;
-import org.reactivecommons.async.impl.listeners.ApplicationCommandListener;
-import org.reactivecommons.async.impl.listeners.ApplicationEventListener;
-import org.reactivecommons.async.impl.sns.Listener;
+import org.reactivecommons.async.impl.handlers.ApplicationCommandHandler;
+import org.reactivecommons.async.impl.handlers.ApplicationEventHandler;
+import org.reactivecommons.async.impl.sns.communications.Listener;
 import org.reactivecommons.async.impl.sns.communications.Sender;
 import org.reactivecommons.async.impl.sns.communications.TopologyCreator;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,7 +16,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import reactor.core.publisher.Flux;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
@@ -46,7 +44,7 @@ public class AWSConfig {
     }
 
     @Bean("evtListener")
-    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventListener appEvtListener, BrokerConfigProps props, TopologyCreator topoloy) {
+    public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         String queueName = props.getEventsQueue();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
@@ -55,7 +53,7 @@ public class AWSConfig {
     }
 
     @Bean("commandListener")
-    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandListener appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
+    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         String queueName = props.getCommandsQueue();
         topoloy.createQueue(queueName).block();

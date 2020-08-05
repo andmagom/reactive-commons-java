@@ -1,36 +1,36 @@
-package org.reactivecommons.async.impl.listeners;
+package org.reactivecommons.async.impl.handlers;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.java.Log;
-import org.reactivecommons.api.domain.Command;
-import org.reactivecommons.async.api.handlers.registered.RegisteredCommandHandler;
+import org.reactivecommons.api.domain.DomainEvent;
+import org.reactivecommons.async.api.handlers.registered.RegisteredEventListener;
 import org.reactivecommons.async.impl.HandlerResolver;
 import org.reactivecommons.async.impl.converters.MessageConverter;
 import org.reactivecommons.async.impl.model.MessageSQS;
-import org.reactivecommons.async.impl.sns.SNSEventModel;
+import org.reactivecommons.async.impl.model.SNSEventModel;
 import reactor.core.publisher.Mono;
 
 @Log
-public class ApplicationCommandListener extends GenericMessageListener {
+public class ApplicationEventHandler extends GenericMessageHandler {
 
   private final MessageConverter messageConverter;
 
-  public ApplicationCommandListener(HandlerResolver handlers, MessageConverter messageConverter) {
+  public ApplicationEventHandler(HandlerResolver handlers, MessageConverter messageConverter) {
     super(handlers);
     this.messageConverter = messageConverter;
   }
 
-  private Mono<RegisteredCommandHandler> getHandler(SNSEventModel msj) {
+  private Mono<RegisteredEventListener> getHandler(SNSEventModel msj) {
     ObjectMapper objectMapper = new ObjectMapper();
     try {
-      Command command = objectMapper.readValue(msj.getMessage(), Command.class);
-      String commandName = command.getName();
-      RegisteredCommandHandler handler = handlers.getCommandHandler(commandName);
+      DomainEvent event = objectMapper.readValue(msj.getMessage(), DomainEvent.class);
+      String eventName = event.getName();
+      RegisteredEventListener handler = handlers.getEventListener(eventName);
       if (handler != null) {
         return Mono.just(handler);
       } else {
-        log.info("Handler doesn't found for command " + commandName);
+        log.info("Handler doesn't found for event " + eventName);
         return Mono.empty();
       }
     } catch (JsonProcessingException e) {
@@ -43,9 +43,9 @@ public class ApplicationCommandListener extends GenericMessageListener {
         .flatMap(handler -> {
           Class dataClass = handler.getInputClass();
           MessageSQS message = new MessageSQS(msj.getMessage());
-          Command<Object> command = messageConverter.readCommand(message, dataClass);
+          DomainEvent<Object> domainEvent = messageConverter.readDomainEvent(message, dataClass);
           return handler.getHandler()
-              .handle(command);
+              .handle(domainEvent);
         });
   }
 

@@ -1,10 +1,11 @@
-package org.reactivecommons.async.impl.sns;
+package org.reactivecommons.async.impl.sns.communications;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
 import org.reactivecommons.async.api.handlers.GenericHandler;
+import org.reactivecommons.async.impl.model.SNSEventModel;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
@@ -82,6 +83,7 @@ public class Listener {
 
   public Flux<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> handler) {
     return listen(queueName, handler)
+        .doOnSuccess((e) -> System.out.println("terminated " + queueName))
         .repeat();
   }
 

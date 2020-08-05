@@ -4,7 +4,7 @@ import org.reactivecommons.async.impl.RabbitDirectAsyncGateway;
 import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
 import org.reactivecommons.async.impl.communications.ReactiveMessageSender;
 import org.reactivecommons.async.impl.converters.MessageConverter;
-import org.reactivecommons.async.impl.listeners.ApplicationReplyListener;
+import org.reactivecommons.async.impl.handlers.ApplicationReplyListener;
 import org.reactivecommons.async.impl.reply.ReactiveReplyRouter;
 
 import java.nio.ByteBuffer;
