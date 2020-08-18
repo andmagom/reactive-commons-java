@@ -38,7 +38,7 @@ public class ApplicationEventHandler extends GenericMessageHandler {
     }
   }
 
-  public Mono handle(SNSEventModel msj) {
+  public Mono<Void> handle(SNSEventModel msj) {
     return getHandler(msj)
         .flatMap(handler -> {
           Class dataClass = handler.getInputClass();

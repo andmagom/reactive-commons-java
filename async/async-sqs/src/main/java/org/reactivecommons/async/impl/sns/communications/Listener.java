@@ -21,19 +21,19 @@ public class Listener {
 
   private final SqsAsyncClient client;
 
-  public Mono<Void> listen(String queueName, GenericHandler<Mono, SNSEventModel> handler) {
+  public Mono<Void> listen(String queueName, GenericHandler<Void, SNSEventModel> handler) {
     return getMessages(queueName)
         .flatMap(this::mapObject)
-        .flatMap(tuple -> handleMessage(tuple, handler))
-        .flatMap(message -> deleteMessage(queueName, message))
+        .flatMap(tuple -> handleMessage(tuple, queueName, handler))
         .then();
   }
 
-  public Mono<Message> handleMessage(Tuple2<SNSEventModel, Message> tuple,
-      GenericHandler<Mono, SNSEventModel> f) {
-    f.handle(tuple.getT1()).subscribe();
-    Mono<Message> originalMessage = Mono.just(tuple.getT2());
-    return originalMessage;
+  public Mono<Void> handleMessage(Tuple2<SNSEventModel, Message> tuple,
+      String queueName,
+      GenericHandler<Void, SNSEventModel> handler) {
+    return handler.handle(tuple.getT1())
+        .doOnSuccess(message -> deleteMessage(queueName, tuple.getT2()))
+        .then();
   }
 
 
@@ -81,9 +81,9 @@ public class Listener {
     return DeleteMessageRequest.builder().queueUrl(queueName).receiptHandle(receiptHandle).build();
   }
 
-  public Flux<Void> startListener(String queueName, GenericHandler<Mono, SNSEventModel> handler) {
+  public Flux<Void> startListener(String queueName, GenericHandler<Void, SNSEventModel> handler) {
     return listen(queueName, handler)
-        .doOnSuccess((e) -> System.out.println("terminated " + queueName))
+        .doOnSuccess((e) -> log.fine("listen terminated " + queueName))
         .repeat();
   }
 
