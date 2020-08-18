@@ -20,8 +20,8 @@ public class BrokerConfigProps implements IBrokerConfigProps {
   @Value("${spring.application.name}")
   private String appName;
 
-  @Value("${spring.application.project-name}")
-  private String projectName;
+  @Value("${spring.application.domain-name}")
+  private String domainName;
 
   private final AsyncProps asyncProps;
 
@@ -29,17 +29,17 @@ public class BrokerConfigProps implements IBrokerConfigProps {
 
   @Override
   public String getEventsQueue() {
-    return appName + "-" + projectName + "-subsEvents";
+    return appName + "-" + domainName + "-subsEvents";
   }
 
   @Override
   public String getQueriesQueue() {
-    return appName + "-" + projectName  + "-query";
+    return appName + "-" + domainName + "-query";
   }
 
   @Override
   public String getCommandsQueue() {
-    return appName + "-" + projectName  + "-commands";
+    return appName + "-" + domainName + "-commands";
   }
 
   @Override
@@ -58,12 +58,12 @@ public class BrokerConfigProps implements IBrokerConfigProps {
 
   @Override
   public String getDomainEventsExchangeName() {
-    return projectName + "-" + asyncProps.getDomain().getEvents().getTopic();
+    return domainName + "-" + asyncProps.getDomain().getEvents().getTopic();
   }
 
   @Override
   public String getDirectMessagesExchangeName() {
-    return  "-" + projectName + "-" + asyncProps.getDirect().getTopic();
+    return appName + "-" + domainName + "-" + asyncProps.getDirect().getTopic();
   }
 
   private String newRandomQueueName() {
