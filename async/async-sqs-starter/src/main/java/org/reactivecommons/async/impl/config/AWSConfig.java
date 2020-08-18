@@ -83,7 +83,7 @@ public class AWSConfig {
 
     @Bean
     public TopologyCreator getTopology(SqsAsyncClient sqsAsyncClient, SnsAsyncClient snsAsyncClient) {
-        return new TopologyCreator(snsAsyncClient, sqsAsyncClient);
+        return new TopologyCreator(snsAsyncClient, sqsAsyncClient,"","");
     }
 
 
