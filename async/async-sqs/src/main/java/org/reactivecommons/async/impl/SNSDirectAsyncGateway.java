@@ -25,6 +25,6 @@ public class SNSDirectAsyncGateway implements DirectAsyncGateway {
   }
 
   private String getTargetTopic(String targetAppName) {
-    return targetAppName.concat("-").concat(topicTarget);
+    return targetAppName.concat(topicTarget);
   }
 }

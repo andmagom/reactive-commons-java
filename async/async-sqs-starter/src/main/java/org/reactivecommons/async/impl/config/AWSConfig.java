@@ -56,7 +56,7 @@ public class AWSConfig {
     public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         String queueName = props.getCommandsQueue();
-        topoloy.createTopic(props.getDirectMessagesExchangeName()).block();
+        topoloy.createTopic(props.getAppName()+ props.getDirectMessagesExchangeName()).block();
         topoloy.createQueue(queueName).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appCmdListener::handle).subscribe();
