@@ -73,7 +73,7 @@ public class Listener {
   public Mono<ReceiveMessageRequest> getReceiveMessageRequest(String name) {
     log.info("Getting messages from " + name);
     return Mono.just(
-        ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20)
+        ReceiveMessageRequest.builder().queueUrl(name).maxNumberOfMessages(10).waitTimeSeconds(20).attributeNamesWithStrings("ApproximateReceiveCount")
             .build());
   }
 

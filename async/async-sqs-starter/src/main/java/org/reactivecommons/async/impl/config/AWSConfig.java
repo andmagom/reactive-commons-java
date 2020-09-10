@@ -14,9 +14,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
+import software.amazon.awssdk.services.sns.model.ListTopicsRequest;
+import software.amazon.awssdk.services.sns.model.Topic;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 
 
@@ -36,18 +40,24 @@ public class AWSConfig {
     private String appName;
 
     @Bean
-    public Sender messageSender(SnsAsyncClient client, AWSProperties awsProperties) {
-        final Sender sender = new Sender(client, appName, awsProperties.getPrefixARN() );
+    public Sender messageSender(SnsAsyncClient client, AWSProperties awsProperties, BrokerConfigProps props ) {
+
+        String exchangeName = props.getDomainEventsExchangeName();
+        String arnSnsPrefix = getTopicArn(exchangeName,client).block();
+        final Sender sender = new Sender(client, appName,arnSnsPrefix );
         return sender;
     }
 
     @Bean("evtListener")
     public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener,
-        BrokerConfigProps props, TopologyCreator topoloy) {
+        BrokerConfigProps props, TopologyCreator topology) {
         final Listener listener = new Listener(sqsClient);
+        final String exchangeName = props.getDomainEventsExchangeName();
         String queueName = props.getEventsQueue();
-        topoloy.createQueue(queueName).block();
-        String queueUrl = topoloy.getQueueUrl(queueName).block();
+        topology.createQueue(queueName).block();
+        topology.bind(queueName,exchangeName).block();
+        topology.setQueueAttributes(queueName,exchangeName).block();
+        String queueUrl = topology.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appEvtListener::handle).subscribe();
         return listener;
     }
@@ -55,9 +65,12 @@ public class AWSConfig {
     @Bean("commandListener")
     public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
+        final String exchangeName = appName.concat(props.getDirectMessagesExchangeName());
         String queueName = props.getCommandsQueue();
-        topoloy.createTopic(props.getAppName()+ props.getDirectMessagesExchangeName()).block();
+        topoloy.createTopic(exchangeName).block();
         topoloy.createQueue(queueName).block();
+        topoloy.bind(queueName,exchangeName).block();
+        topoloy.setQueueAttributes(queueName, exchangeName).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appCmdListener::handle).subscribe();
         return listener;
@@ -67,24 +80,46 @@ public class AWSConfig {
     public SqsAsyncClient getSQSAsyncClient(AWSProperties awsProperties) {
         Region region = Region.of(awsProperties.getRegion());
         return SqsAsyncClient.builder()
-            .region(region)
-            .credentialsProvider(DefaultCredentialsProvider.create())
-            .build();
+                .region(region)
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
     }
 
     @Bean
     public SnsAsyncClient getSNSAsyncClient(AWSProperties awsProperties) {
         Region region = Region.of(awsProperties.getRegion());
         return SnsAsyncClient.builder()
-            .region(region)
-            .credentialsProvider(DefaultCredentialsProvider.create())
-            .build();
+                .region(region)
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
     }
 
     @Bean
-    public TopologyCreator getTopology(SqsAsyncClient sqsAsyncClient, SnsAsyncClient snsAsyncClient) {
-        return new TopologyCreator(snsAsyncClient, sqsAsyncClient,"","");
+    public TopologyCreator getTopology(SqsAsyncClient sqsAsyncClient, SnsAsyncClient snsAsyncClient, BrokerConfigProps props) {
+        String queueName = props.getDomainEventsExchangeName();
+        String arnSnsPrefix = getTopicArn(queueName,snsAsyncClient).block();
+        String arnSqsPrefix = arnSnsPrefix.replace("sns","sqs");
+        return new TopologyCreator(snsAsyncClient, sqsAsyncClient,arnSnsPrefix,arnSqsPrefix);
     }
+
+    public Flux<Topic> listTopics(SnsAsyncClient snsAsyncClient){
+        return getListTopicRequest()
+                .flatMap(request -> Mono.fromFuture(snsAsyncClient.listTopics(request)))
+                .flatMapMany((response)->Flux.fromIterable(response.topics()));
+    }
+
+    public Mono<String> getTopicArn(String name, SnsAsyncClient snsAsyncClient) {
+        return listTopics(snsAsyncClient)
+                .map(Topic::topicArn)
+                .filter((topic) -> topic.contains(":" + name))
+                .map((e)-> e.replace(":"+name,""))
+                .single();
+    }
+
+    private Mono<ListTopicsRequest> getListTopicRequest(){
+        return Mono.just(ListTopicsRequest.builder().build());
+    }
+
 
 
 }
