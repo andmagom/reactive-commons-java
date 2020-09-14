@@ -20,8 +20,6 @@ public class TopologyCreator {
 
     private final SnsAsyncClient topicClient;
     private final SqsAsyncClient queueClient;
-    private final String arnSnsPrefix;
-    private final String arnSqsPrefix;
 
 
     public Mono<String> declareTopic(String name){
@@ -121,18 +119,18 @@ public class TopologyCreator {
 
     }
 
-    public Mono<String> setQueueAttributes(String queueName,String topicName){
+    public Mono<String> setQueueAttributes(String queueName, String topicName, String arnSnsPrefix, String arnSqsPrefix ){
         return getQueueUrl(queueName)
-                .flatMap((queueUrl)->{
-                    Map<String,String> attributes = getAttributeMap(queueName,topicName);
-                    return setQueueAttributesRequest(queueUrl,attributes);
+                .flatMap(queueUrl -> {
+                    Map<String,String> attributes = getAttributeMap(queueName,topicName, arnSnsPrefix, arnSqsPrefix);
+                    return setQueueAttributesRequest(queueUrl, attributes);
                 })
                 .flatMap(request->Mono.fromFuture(queueClient.setQueueAttributes(request)))
                 .map(SetQueueAttributesResponse::toString);
 
     }
 
-    private Map<String,String> getAttributeMap(String queueName,String topicName){
+    private Map<String,String> getAttributeMap(String queueName,String topicName, String arnSnsPrefix, String arnSqsPrefix){
         Map<String,String> map = new HashMap<>();
         map.put("Policy","{\n" +
                 "  \"Version\": \"2012-10-17\",\n" +

@@ -14,6 +14,5 @@ import java.util.List;
 @ConfigurationProperties(prefix = "aws")
 @Data
 public class AWSProperties {
-    private String prefixARN;
     private String region;
 }

@@ -38,13 +38,16 @@ public class AWSConfig {
 
     @Value("${spring.application.name}")
     private String appName;
+    private String arnSnsPrefix;
+    private String arnSqsPrefix;
 
     @Bean
     public Sender messageSender(SnsAsyncClient client, AWSProperties awsProperties, BrokerConfigProps props ) {
-
         String exchangeName = props.getDomainEventsExchangeName();
-        String arnSnsPrefix = getTopicArn(exchangeName,client).block();
-        final Sender sender = new Sender(client, appName,arnSnsPrefix );
+        String arnSnsPrefix = getTopicArn(exchangeName, client).block();
+        final Sender sender = new Sender(client, appName, arnSnsPrefix );
+        arnSnsPrefix = getTopicArn(exchangeName, client).block();
+        arnSqsPrefix = arnSnsPrefix.replace("sns","sqs");
         return sender;
     }
 
@@ -53,10 +56,11 @@ public class AWSConfig {
         BrokerConfigProps props, TopologyCreator topology) {
         final Listener listener = new Listener(sqsClient);
         final String exchangeName = props.getDomainEventsExchangeName();
+
         String queueName = props.getEventsQueue();
         topology.createQueue(queueName).block();
         topology.bind(queueName,exchangeName).block();
-        topology.setQueueAttributes(queueName,exchangeName).block();
+        topology.setQueueAttributes(queueName, exchangeName, arnSnsPrefix, arnSqsPrefix).block();
         String queueUrl = topology.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appEvtListener::handle).subscribe();
         return listener;
@@ -66,11 +70,12 @@ public class AWSConfig {
     public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
         final Listener listener = new Listener(sqsClient);
         final String exchangeName = appName.concat(props.getDirectMessagesExchangeName());
+
         String queueName = props.getCommandsQueue();
         topoloy.createTopic(exchangeName).block();
         topoloy.createQueue(queueName).block();
         topoloy.bind(queueName,exchangeName).block();
-        topoloy.setQueueAttributes(queueName, exchangeName).block();
+        topoloy.setQueueAttributes(queueName, exchangeName, arnSnsPrefix, arnSqsPrefix).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appCmdListener::handle).subscribe();
         return listener;
@@ -97,9 +102,7 @@ public class AWSConfig {
     @Bean
     public TopologyCreator getTopology(SqsAsyncClient sqsAsyncClient, SnsAsyncClient snsAsyncClient, BrokerConfigProps props) {
         String queueName = props.getDomainEventsExchangeName();
-        String arnSnsPrefix = getTopicArn(queueName,snsAsyncClient).block();
-        String arnSqsPrefix = arnSnsPrefix.replace("sns","sqs");
-        return new TopologyCreator(snsAsyncClient, sqsAsyncClient,arnSnsPrefix,arnSqsPrefix);
+        return new TopologyCreator(snsAsyncClient, sqsAsyncClient);
     }
 
     public Flux<Topic> listTopics(SnsAsyncClient snsAsyncClient){
