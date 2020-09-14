@@ -25,7 +25,7 @@ public class EventBusConfig {
     @PostConstruct
     public void createEventTopic() {
         final String exchangeName = props.getDomainEventsExchangeName();
-        String topic = topology.createTopic(exchangeName).block();
+        topology.createTopic(exchangeName).block();
     }
 
     @Bean

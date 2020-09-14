@@ -7,6 +7,7 @@ import org.reactivecommons.async.impl.config.props.BrokerConfigProps;
 import org.reactivecommons.async.impl.handlers.ApplicationCommandHandler;
 import org.reactivecommons.async.impl.handlers.ApplicationEventHandler;
 import org.reactivecommons.async.impl.sns.communications.Listener;
+import org.reactivecommons.async.impl.sns.communications.SQSSender;
 import org.reactivecommons.async.impl.sns.communications.Sender;
 import org.reactivecommons.async.impl.sns.communications.TopologyCreator;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,39 +43,56 @@ public class AWSConfig {
     private String arnSqsPrefix;
 
     @Bean
-    public Sender messageSender(SnsAsyncClient client, AWSProperties awsProperties, BrokerConfigProps props ) {
+    public Sender messageSender(SnsAsyncClient client, AWSProperties awsProperties, BrokerConfigProps props) {
         String exchangeName = props.getDomainEventsExchangeName();
-        String arnSnsPrefix = getTopicArn(exchangeName, client).block();
-        final Sender sender = new Sender(client, appName, arnSnsPrefix );
         arnSnsPrefix = getTopicArn(exchangeName, client).block();
-        arnSqsPrefix = arnSnsPrefix.replace("sns","sqs");
+        final Sender sender = new Sender(client, appName, arnSnsPrefix);
+        arnSqsPrefix = arnSnsPrefix.replace("sns", "sqs");
         return sender;
+    }
+
+    @Bean
+    public SQSSender sqsSender(SqsAsyncClient client) {
+        return new SQSSender(client);
     }
 
     @Bean("evtListener")
     public Listener messageEventListener(SqsAsyncClient sqsClient, ApplicationEventHandler appEvtListener,
-        BrokerConfigProps props, TopologyCreator topology) {
-        final Listener listener = new Listener(sqsClient);
+                                         BrokerConfigProps props, TopologyCreator topology, SQSSender sqsSender) {
+        final Listener listener = getListener(sqsClient, sqsSender);
+
         final String exchangeName = props.getDomainEventsExchangeName();
 
         String queueName = props.getEventsQueue();
         topology.createQueue(queueName).block();
-        topology.bind(queueName,exchangeName).block();
+        topology.bind(queueName, exchangeName).block();
         topology.setQueueAttributes(queueName, exchangeName, arnSnsPrefix, arnSqsPrefix).block();
         String queueUrl = topology.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appEvtListener::handle).subscribe();
         return listener;
     }
 
+    private Listener getListener(SqsAsyncClient sqsClient, SQSSender sqsSender) {
+        return Listener.builder()
+                .client(sqsClient)
+                .sqsSender(sqsSender)
+                .retryDelay(asyncProps.getRetryDelay())
+                .maxRetries(asyncProps.getMaxRetries())
+                .prefetchCount(asyncProps.getPrefetchCount())
+                .build();
+    }
+
     @Bean("commandListener")
-    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener, BrokerConfigProps props, TopologyCreator topoloy) {
-        final Listener listener = new Listener(sqsClient);
+    public Listener messageCommandListener(SqsAsyncClient sqsClient, ApplicationCommandHandler appCmdListener,
+                                           BrokerConfigProps props, TopologyCreator topoloy, SQSSender sqsSender) {
+        final Listener listener = getListener(sqsClient, sqsSender);
+
         final String exchangeName = appName.concat(props.getDirectMessagesExchangeName());
 
         String queueName = props.getCommandsQueue();
         topoloy.createTopic(exchangeName).block();
         topoloy.createQueue(queueName).block();
-        topoloy.bind(queueName,exchangeName).block();
+        topoloy.bind(queueName, exchangeName).block();
         topoloy.setQueueAttributes(queueName, exchangeName, arnSnsPrefix, arnSqsPrefix).block();
         String queueUrl = topoloy.getQueueUrl(queueName).block();
         listener.startListener(queueUrl, appCmdListener::handle).subscribe();
@@ -105,24 +123,23 @@ public class AWSConfig {
         return new TopologyCreator(snsAsyncClient, sqsAsyncClient);
     }
 
-    public Flux<Topic> listTopics(SnsAsyncClient snsAsyncClient){
+    public Flux<Topic> listTopics(SnsAsyncClient snsAsyncClient) {
         return getListTopicRequest()
                 .flatMap(request -> Mono.fromFuture(snsAsyncClient.listTopics(request)))
-                .flatMapMany((response)->Flux.fromIterable(response.topics()));
+                .flatMapMany((response) -> Flux.fromIterable(response.topics()));
     }
 
     public Mono<String> getTopicArn(String name, SnsAsyncClient snsAsyncClient) {
         return listTopics(snsAsyncClient)
                 .map(Topic::topicArn)
                 .filter((topic) -> topic.contains(":" + name))
-                .map((e)-> e.replace(":"+name,""))
+                .map((e) -> e.replace(":" + name, ""))
                 .single();
     }
 
-    private Mono<ListTopicsRequest> getListTopicRequest(){
+    private Mono<ListTopicsRequest> getListTopicRequest() {
         return Mono.just(ListTopicsRequest.builder().build());
     }
-
 
 
 }

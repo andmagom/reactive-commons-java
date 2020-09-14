@@ -89,4 +89,5 @@ dependencies {
     implementation 'software.amazon.awssdk:sqs'
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.11.1'
     compile group: 'joda-time', name: 'joda-time', version: '2.10.6'
+    compile("org.springframework.boot:spring-boot-starter-log4j2")
 }

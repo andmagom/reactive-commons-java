@@ -3,6 +3,7 @@ package org.reactivecommons.async.impl.handlers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.java.Log;
+import lombok.extern.log4j.Log4j2;
 import org.reactivecommons.api.domain.Command;
 import org.reactivecommons.async.api.handlers.registered.RegisteredCommandHandler;
 import org.reactivecommons.async.impl.HandlerResolver;
@@ -11,7 +12,7 @@ import org.reactivecommons.async.impl.model.MessageSQS;
 import org.reactivecommons.async.impl.model.SNSEventModel;
 import reactor.core.publisher.Mono;
 
-@Log
+@Log4j2
 public class ApplicationCommandHandler extends GenericMessageHandler {
 
   private final MessageConverter messageConverter;
@@ -30,7 +31,7 @@ public class ApplicationCommandHandler extends GenericMessageHandler {
       if (handler != null) {
         return Mono.just(handler);
       } else {
-        log.info("Handler doesn't found for command " + commandName);
+        log.error("Handler doesn't found for command " + commandName);
         return Mono.empty();
       }
     } catch (JsonProcessingException e) {

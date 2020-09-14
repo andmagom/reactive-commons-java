@@ -1,6 +1,5 @@
 package org.reactivecommons.async.impl.model;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data

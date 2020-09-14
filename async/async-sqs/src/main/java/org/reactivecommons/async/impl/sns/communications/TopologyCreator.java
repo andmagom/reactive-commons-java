@@ -2,6 +2,7 @@ package org.reactivecommons.async.impl.sns.communications;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.java.Log;
+import lombok.extern.log4j.Log4j2;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
@@ -14,7 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-@Log
+@Log4j2
 @AllArgsConstructor
 public class TopologyCreator {
 
@@ -48,8 +49,8 @@ public class TopologyCreator {
         return getCreateTopicRequest(name)
                 .flatMap(request->Mono.fromFuture(topicClient.createTopic(request)))
                 .map(CreateTopicResponse::toString)
-                .doOnNext((response) -> log.fine(response))
-                .doOnError((e) -> log.severe(e.toString()));
+                .doOnNext((response) -> log.debug("Topic Created: " + response))
+                .doOnError((e) -> log.error("Error creating topic: " + e.toString()));
     }
 
 
@@ -61,8 +62,8 @@ public class TopologyCreator {
         return createQueueRequest(name)
                 .flatMap(request->Mono.fromFuture(queueClient.createQueue(request)))
                 .map(CreateQueueResponse::toString)
-                .doOnNext((response) -> log.fine(response))
-                .doOnError((e) -> log.severe(e.toString()));
+                .doOnNext((response) -> log.debug("Queue created: " +response))
+                .doOnError((e) -> log.error("Error creating queue: " + e.toString()));
     }
 
 

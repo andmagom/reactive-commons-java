@@ -5,9 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.java.Log;
+import lombok.extern.log4j.Log4j2;
 import org.reactivecommons.async.impl.Headers;
-import org.reactivecommons.async.impl.sns.config.SNSProps;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
 import software.amazon.awssdk.services.sns.model.*;
@@ -18,7 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 @Data
 @RequiredArgsConstructor
-@Log
+@Log4j2
 public class Sender {
 
   private final SnsAsyncClient client;

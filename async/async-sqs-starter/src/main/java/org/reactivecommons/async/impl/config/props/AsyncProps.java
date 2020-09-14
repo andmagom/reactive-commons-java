@@ -2,6 +2,7 @@ package org.reactivecommons.async.impl.config.props;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
@@ -20,9 +21,9 @@ public class AsyncProps {
     @NestedConfigurationProperty
     private DirectProps direct = new DirectProps();
 
-    private Integer maxRetries = 10;
+    private Integer maxRetries = 2;
 
-    private Integer prefetchCount = 250;
+    private Integer prefetchCount = 10;
 
     private Integer retryDelay = 1000;
 
