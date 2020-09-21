@@ -9,12 +9,14 @@ import lombok.extern.log4j.Log4j2;
 import org.reactivecommons.async.impl.Headers;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.sns.SnsAsyncClient;
-import software.amazon.awssdk.services.sns.model.*;
+import software.amazon.awssdk.services.sns.model.MessageAttributeValue;
+import software.amazon.awssdk.services.sns.model.PublishRequest;
 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
 @Data
 @RequiredArgsConstructor
 @Log4j2
@@ -26,7 +28,7 @@ public class Sender {
 
   public <T> Mono<Void> publish(T message, String targetName) {
     return getPublishRequest(message, targetName)
-        .flatMap( request -> Mono.fromFuture( client.publish(request) ))
+        .flatMap(request -> Mono.fromFuture(client.publish(request)))
         .doOnSuccess(response -> log.info(response.messageId()))
         .then();
   }
@@ -34,9 +36,9 @@ public class Sender {
   private <T> Mono<PublishRequest> getPublishRequest(T message, String targetName) {
     try {
       PublishRequest request = PublishRequest.builder()
-          .message( objectToJSON(message) )
-          .messageAttributes( getMessageAttributes() )
-          .topicArn( getTopicARN( targetName ) )
+          .message(objectToJSON(message))
+          .messageAttributes(getMessageAttributes())
+          .topicArn(getTopicARN(targetName))
           .build();
       return Mono.just(request);
     } catch (JsonProcessingException e) {
@@ -45,11 +47,11 @@ public class Sender {
   }
 
   private String getTopicARN(String targetTopic) {
-    return prefixARN + ":" +targetTopic;
+    return prefixARN + ":" + targetTopic;
   }
 
   private <T> String objectToJSON(T message) throws JsonProcessingException {
-    ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+    ObjectWriter ow = new ObjectMapper().writer();
     String json = ow.writeValueAsString(message);
     return json;
   }
@@ -63,7 +65,8 @@ public class Sender {
     return messageAttributes;
   }
 
-  private void addAttribute(Map<String, MessageAttributeValue> messageAttributes, final String attributeName, final String attributeValue) {
+  private void addAttribute(Map<String, MessageAttributeValue> messageAttributes, final String attributeName,
+                            final String attributeValue) {
     MessageAttributeValue messageAttributeValue = MessageAttributeValue.builder()
         .dataType("String")
         .stringValue(attributeValue)

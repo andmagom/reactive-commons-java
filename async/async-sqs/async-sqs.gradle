@@ -70,7 +70,7 @@ bintray {
         version {
             name = project.property('version')
             desc = 'First version'
-            released  = new Date()
+            released = new Date()
             vcsTag = project.property('version')
         }
     }
@@ -90,4 +90,10 @@ dependencies {
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.11.1'
     compile group: 'joda-time', name: 'joda-time', version: '2.10.6'
     compile("org.springframework.boot:spring-boot-starter-log4j2")
+}
+
+configurations {
+    all {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+    }
 }
