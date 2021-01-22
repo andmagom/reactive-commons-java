@@ -5,7 +5,7 @@ plugins {
     id 'maven-publish'
 }
 
-test.onlyIf { false }
+test.onlyIf { true }
 
 def pomConfig = {
     licenses {
@@ -73,8 +73,8 @@ bintray {
 }
 
 dependencies {
-    compile project(":async-commons")
-    api('org.springframework.boot:spring-boot-starter')
+    api project(":async-commons")
+    compileOnly('org.springframework.boot:spring-boot-starter')
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 

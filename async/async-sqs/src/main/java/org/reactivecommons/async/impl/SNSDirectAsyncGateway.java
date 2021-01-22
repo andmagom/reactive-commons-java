@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import org.reactivecommons.api.domain.Command;
 import org.reactivecommons.async.api.AsyncQuery;
 import org.reactivecommons.async.api.DirectAsyncGateway;
+import org.reactivecommons.async.api.From;
 import org.reactivecommons.async.impl.sns.communications.Sender;
 import reactor.core.publisher.Mono;
 
@@ -21,6 +22,11 @@ public class SNSDirectAsyncGateway implements DirectAsyncGateway {
 
   @Override
   public <T, R> Mono<R> requestReply(AsyncQuery<T> query, String targetName, Class<R> type) {
+    return null;
+  }
+
+  @Override
+  public <T> Mono<Void> reply(T response, From from) {
     return null;
   }
 

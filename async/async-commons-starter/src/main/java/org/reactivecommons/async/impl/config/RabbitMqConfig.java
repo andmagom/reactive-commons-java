@@ -4,10 +4,15 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.java.Log;
+import org.reactivecommons.api.domain.Command;
+import org.reactivecommons.api.domain.DomainEvent;
 import org.reactivecommons.api.domain.DomainEventBus;
-import org.reactivecommons.async.impl.DiscardNotifier;
-import org.reactivecommons.async.impl.RabbitDiscardNotifier;
-import org.reactivecommons.async.impl.RabbitDomainEventBus;
+import org.reactivecommons.async.api.*;
+import org.reactivecommons.async.api.handlers.registered.RegisteredCommandHandler;
+import org.reactivecommons.async.api.handlers.registered.RegisteredEventListener;
+import org.reactivecommons.async.api.handlers.registered.RegisteredQueryHandler;
+import org.reactivecommons.async.impl.*;
+import org.reactivecommons.async.impl.communications.Message;
 import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
 import org.reactivecommons.async.impl.communications.ReactiveMessageSender;
 import org.reactivecommons.async.impl.communications.TopologyCreator;
@@ -17,10 +22,12 @@ import org.reactivecommons.async.impl.converters.MessageConverter;
 import org.reactivecommons.async.impl.converters.json.DefaultObjectMapperSupplier;
 import org.reactivecommons.async.impl.converters.json.JacksonMessageConverter;
 import org.reactivecommons.async.impl.converters.json.ObjectMapperSupplier;
+import org.reactivecommons.async.impl.ext.CustomErrorReporter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.PropertyMapper;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -29,6 +36,9 @@ import reactor.rabbitmq.*;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
 import static reactor.rabbitmq.ExchangeSpecification.exchange;
@@ -53,26 +63,29 @@ public class RabbitMqConfig {
     private String appName;
 
     @Bean
-    public ReactiveMessageSender messageSender(ConnectionFactoryProvider provider, MessageConverter converter,
-                                               BrokerConfigProps brokerConfigProps, RabbitProperties rabbitProperties) {
-        final Mono<Connection> senderConnection =         createConnectionMono(provider.getConnectionFactory(), appName, SENDER_TYPE);
+    public ReactiveMessageSender messageSender(MessageConverter converter, BrokerConfigProps brokerConfigProps, SenderOptions senderOptions) {
+        final Sender sender = RabbitFlux.createSender(senderOptions);
+        return new ReactiveMessageSender(sender, brokerConfigProps.getAppName(), converter, new TopologyCreator(sender));
+    }
+
+    @Bean
+    public SenderOptions reactiveCommonsSenderOptions(ConnectionFactoryProvider provider, RabbitProperties rabbitProperties) {
+        final Mono<Connection> senderConnection = createConnectionMono(provider.getConnectionFactory(), appName, SENDER_TYPE);
         final ChannelPoolOptions channelPoolOptions = new ChannelPoolOptions();
         final PropertyMapper map = PropertyMapper.get();
 
         map.from(rabbitProperties.getCache().getChannel()::getSize).whenNonNull()
-                .to(channelPoolOptions::maxCacheSize);
+            .to(channelPoolOptions::maxCacheSize);
 
         final ChannelPool channelPool = ChannelPoolFactory.createChannelPool(
-                senderConnection,
-                channelPoolOptions
+            senderConnection,
+            channelPoolOptions
         );
 
-        final Sender sender = RabbitFlux.createSender(new SenderOptions()
-                .channelPool(channelPool)
-                .resourceManagementChannelMono(channelPool.getChannelMono()
-                        .transform(Utils::cache)));
-
-        return new ReactiveMessageSender(sender, brokerConfigProps.getAppName(), converter, new TopologyCreator(sender));
+        return new SenderOptions()
+            .channelPool(channelPool)
+            .resourceManagementChannelMono(channelPool.getChannelMono()
+                .transform(Utils::cache));
     }
 
     @Bean
@@ -90,7 +103,13 @@ public class RabbitMqConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    public ConnectionFactoryProvider connectionFactory(RabbitProperties properties) {
+    public BrokerConfig brokerConfig() {
+        return new BrokerConfig();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ConnectionFactoryProvider rabbitRConnectionFactory(RabbitProperties properties) {
         final ConnectionFactory factory = new ConnectionFactory();
         PropertyMapper map = PropertyMapper.get();
         map.from(properties::determineHost).whenNonNull().to(factory::setHost);
@@ -120,6 +139,27 @@ public class RabbitMqConfig {
         return new RabbitDiscardNotifier(domainEventBus(sender, props), objectMapperSupplier.get());
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    public CustomErrorReporter reactiveCommonsCustomErrorReporter() {
+        return new CustomErrorReporter() {
+            @Override
+            public Mono<Void> reportError(Throwable ex, Message rawMessage, Command<?> message, boolean redelivered) {
+                return Mono.empty();
+            }
+
+            @Override
+            public Mono<Void> reportError(Throwable ex, Message rawMessage, DomainEvent<?> message, boolean redelivered) {
+                return Mono.empty();
+            }
+
+            @Override
+            public Mono<Void> reportError(Throwable ex, Message rawMessage, AsyncQuery<?> message, boolean redelivered) {
+                return Mono.empty();
+            }
+        };
+    }
+
     private DomainEventBus domainEventBus(ReactiveMessageSender sender, BrokerConfigProps props) {
         final String exchangeName = props.getDomainEventsExchangeName();
         sender.getTopologyCreator().declare(exchange(exchangeName).durable(true).type("topic")).subscribe();
@@ -134,6 +174,63 @@ public class RabbitMqConfig {
                 .retryWhen(Retry.backoff(Long.MAX_VALUE, Duration.ofMillis(300))
                         .maxBackoff(Duration.ofMillis(3000)))
                 .cache();
+    }
+
+    @Bean
+    public HandlerResolver resolver(ApplicationContext context, DefaultCommandHandler defaultCommandHandler) {
+        final Map<String, HandlerRegistry> registries = context.getBeansOfType(HandlerRegistry.class);
+
+        final ConcurrentMap<String, RegisteredQueryHandler> handlers = registries
+                .values().stream()
+                .flatMap(r -> r.getHandlers().stream())
+                .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
+                        ConcurrentHashMap::putAll);
+
+        final ConcurrentMap<String, RegisteredEventListener> eventListeners = registries
+                .values().stream()
+                .flatMap(r -> r.getEventListeners().stream())
+                .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
+                        ConcurrentHashMap::putAll);
+
+        final ConcurrentMap<String, RegisteredCommandHandler> commandHandlers = registries
+                .values().stream()
+                .flatMap(r -> r.getCommandHandlers().stream())
+                .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
+                        ConcurrentHashMap::putAll);
+
+        final ConcurrentMap<String, RegisteredEventListener> eventNotificationListener = registries
+                .values()
+                .stream()
+                .flatMap(r -> r.getEventNotificationListener().stream())
+                .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
+                        ConcurrentHashMap::putAll);
+
+        return new HandlerResolver(handlers, eventListeners, commandHandlers, eventNotificationListener) {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <T> RegisteredCommandHandler<T> getCommandHandler(String path) {
+                final RegisteredCommandHandler<T> handler = super.getCommandHandler(path);
+                return handler != null ? handler : new RegisteredCommandHandler<>("", defaultCommandHandler, Object.class);
+            }
+        };
+    }
+
+    @Bean
+    public DynamicRegistry dynamicRegistry(HandlerResolver resolver, ReactiveMessageListener listener, IBrokerConfigProps props) {
+        return new DynamicRegistryImp(resolver, listener.getTopologyCreator(), props);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public DefaultQueryHandler defaultHandler() {
+        return (DefaultQueryHandler<Object, Object>) command ->
+                Mono.error(new RuntimeException("No Handler Registered"));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public DefaultCommandHandler defaultCommandHandler() {
+        return message -> Mono.error(new RuntimeException("No Handler Registered"));
     }
 
 }

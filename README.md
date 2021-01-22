@@ -1,6 +1,13 @@
-[![Build Status](https://travis-ci.org/reactive-commons/reactive-commons-java.svg?branch=master)](https://travis-ci.org/reactive-commons/reactive-commons-java)
+![](https://github.com/reactive-commons/reactive-commons-java/workflows/reactive-commons-ci-cd/badge.svg)
+[![Reactor RabbitMQ](https://maven-badges.herokuapp.com/maven-central/org.reactivecommons/async-commons-starter/badge.svg)](https://mvnrepository.com/artifact/org.reactivecommons/async-commons-starter)
 # reactive-commons-java
 The purpose of reactive-commons is to provide a set of abstractions and implementations over different patterns and practices that make the foundation of a reactive microservices architecture.
+
+Docs: https://reactivecommons.org/reactive-commons-java/
+
+Other projects: https://github.com/bancolombia
+
+Sponsor by: https://medium.com/bancolombia-tech
 
 Even though the main purpose is to provide such abstractions in a mostly generic way such abstractions would be of little use without a concrete implementation so we provide some implementations in a best effors maner that aim to be easy to change, personalize and extend.
 
@@ -11,15 +18,43 @@ To include all (API and implementation) (Spring boot Starter):
 ```groovy
 
     dependencies {
-      compile 'org.reactivecommons:async-commons-starter:0.4.6'
+      compile 'org.reactivecommons:async-commons-starter:<version-here>'
     }
+
+    //IMPORTANT! if you use the version 0.6.x
+    repositories {
+	    ...
+	    maven { url "https://repo.spring.io/milestone" }
+    }
+    configurations.all {
+        resolutionStrategy.eachDependency {DependencyResolveDetails details ->
+            if (details.requested.group == 'io.projectreactor.rabbitmq'){
+                details.useVersion('1.5.0')
+                details.because('Upgrade')
+            }
+        }
+    }
+
+```
+
+In application.properties
+```
+spring.application.name=MyAppName
+```
+
+Or yaml
+
+```
+spring:
+  application:
+    name: myAppName
 ```
 
 To include only domain events API:
 
 ```groovy
     dependencies {
-      compile 'org.reactivecommons:domain-events-api:0.4.6'
+      compile 'org.reactivecommons:domain-events-api:<version-here>'
     }
 ```
 
@@ -27,7 +62,7 @@ To include only async commons API:
 
 ```groovy
     dependencies {
-      compile 'org.reactivecommons:async-commons-api:0.4.6'
+      compile 'org.reactivecommons:async-commons-api:<version-here>'
     }
 ```
 
@@ -60,19 +95,7 @@ public class DomainEvent<T> {
         this.data = data;
     }
 
-    public String getName() {
-        return this.name;
-    }
-
-    public String getEventId() {
-        return this.eventId;
-    }
-
-    public T getData() {
-        return this.data;
-    }
-
-    //... equals, hascode, toString impl..
+    //... getters, equals, hascode, toString impl..
 
 }
 ```
@@ -119,14 +142,71 @@ public class MainApplication {
     }    
     
 }
+
+
 ```
-Don't forget to add the implementation dependency to the main spring boot module:
+
+Don't forget to add the starter bundle to the main spring boot module (application):
 
 ```groovy
     dependencies {
-      compile 'org.reactivecommons:async-commons:0.0.1-alpha1'
+      compile 'org.reactivecommons:async-commons-starter:<version-here>'
     }
 ```
+
+
+Or add the implementation dependency if for any reason you don't want to use the starter:
+
+```groovy
+    dependencies {
+      compile 'org.reactivecommons:async-commons:<version-here>'
+    }
+```
+
+
+### Domain Event-Listener
+Reactive commons has four types of listeners implemented, available to be registered in the application via the **HandlerRegistry**, each of them is designed to tackle   
+common requirements for listeners in event based applications and abstracts the behavior of event flow in every situation (Varying for example in retrying strategy, dead letter events, sources and so on).
+
+The available event listeners are:
+- Domain Event Listener
+- Query Event Listener
+- Command Listener
+- Notification Listener
+
+Example Code:
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Autowired;
+
+@Configuration
+public class SomeConfigurationClass {
+
+    @Autowired
+    private ManageTasksUseCase someBusinessDependency;
+
+    @Bean
+    public HandlerRegistry notificationEvents() {
+        return HandlerRegistry.register()
+            .listenNotificationEvent("some.event.name", event -> someBusinessDependency.someFunctionReturningMonoVoid(event), SomeClass.class)
+            .listenEvent("some.event.name2", event -> someBusinessDependency.functionReturningMonoVoid(event), Some.class)    
+            .serveQuery("query.name", query -> someBusinessDependency.findSomething(query), SomeQuery.class)    
+            .handleCommand("command.name", cmd -> someBusinessDependency.handleCommand(cmd), CmdClass.class);    
+    }
+}
+```
+
+The first line below "HandlerRegistry.register()"  shows how to handle a notification event (Notification event: an event that should be handled by
+every running instance of a microservice, e.g: notify to every instance that a configuration setting has changed
+  and has to do a hot reload from a persistent source of that data).
+  
+The line ".listenEvent.." shows how to handle a standard event, and event that should be handled only once by some running instance of
+the microservice.
+
+The line ".serveQuery..." shows how to handle a standard request/reply or rpc messages flow.
+
+The line ".handleCommand..." shows how to handle a standard directed command, a message with a delivery guarantee.
 
 ### Request-Reply
 Example Code:
@@ -215,7 +295,33 @@ app.async.retryDelay=1000
 app.async.maxRetries=10
 
 ```
-* withDLQRetry: Wheter to enable or not the new Retry DLQ Strategy
+### Domain custom Configuration (RabbitMQ)
+
+
+```
+app.async.domain.events.exchange=exchangeCustomName
+app.async.domain.events.maxLengthBytes=125000000
+
+```
+
+### Direct custom Configuration (RabbitMQ)
+
+
+```
+app.async.direct.exchange=exchangeCustomName
+app.async.direct.maxLengthBytes=125000000
+```
+
+### Global custom Configuration (RabbitMQ)
+
+
+```
+app.async.global.exchange=exchangeCustomName
+app.async.global.maxLengthBytes=125000000
+app.async.maxConcurrency=20
+```
+
+* withDLQRetry: Whether to enable or not the new Retry DLQ Strategy
 * retryDelay: Delay retry value in ms
-* maxRetries: Max number of retries in case of error in adition to the one automatic retry per queue.
+* maxRetries: Number of retries in case of error in addition to the one automatic retry per queue.
 

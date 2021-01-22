@@ -8,6 +8,7 @@ import org.reactivecommons.async.impl.RabbitMessage;
 import org.reactivecommons.async.impl.communications.Message;
 import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
 import org.reactivecommons.async.impl.communications.TopologyCreator;
+import org.reactivecommons.async.impl.ext.CustomErrorReporter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -36,15 +37,18 @@ public abstract class GenericMessageListener {
     private final ConcurrentHashMap<String, Function<Message, Mono<Object>>> handlers = new ConcurrentHashMap<>();
     private final Receiver receiver;
     private final ReactiveMessageListener messageListener;
-    final String queueName;
-    private Scheduler scheduler = Schedulers.newParallel(getClass().getSimpleName(), 12);
+    protected final String queueName;
+    private final Scheduler scheduler = Schedulers.newParallel(getClass().getSimpleName(), 12);
+    private final Scheduler errorReporterScheduler = Schedulers.newBoundedElastic(4, 256, "errorReporterScheduler");
+
     private final boolean useDLQRetries;
     private final long maxRetries;
     private final DiscardNotifier discardNotifier;
     private final String objectType;
+    private final CustomErrorReporter errorReporter;
 
     public GenericMessageListener(String queueName, ReactiveMessageListener listener, boolean useDLQRetries,
-                                  long maxRetries, DiscardNotifier discardNotifier, String objectType) {
+                                  long maxRetries, DiscardNotifier discardNotifier, String objectType, CustomErrorReporter errorReporter) {
         this.receiver = listener.getReceiver();
         this.queueName = queueName;
         this.messageListener = listener;
@@ -52,6 +56,7 @@ public abstract class GenericMessageListener {
         this.useDLQRetries = useDLQRetries;
         this.discardNotifier = discardNotifier;
         this.objectType = objectType;
+        this.errorReporter = errorReporter;
     }
 
     protected Mono<Void> setUpBindings(TopologyCreator creator) {
@@ -71,21 +76,25 @@ public abstract class GenericMessageListener {
 
         setUpBindings(messageListener.getTopologyCreator()).thenMany(
                 receiver.consumeManualAck(queueName, consumeOptions)
-                        .transform(this::consumeFaultTolerant)
-                        .transform(this::outerFailureProtection))
+                        .transform(this::consumeFaultTolerant))
                 .subscribe();
     }
 
 
     private Mono<AcknowledgableDelivery> handle(AcknowledgableDelivery msj) {
-        String executorPath = getExecutorPath(msj);
-        final Function<Message, Mono<Object>> handler = getExecutor(executorPath);
-        final Message message = RabbitMessage.fromDelivery(msj);
+        try {
+            String executorPath = getExecutorPath(msj);
+            final Function<Message, Mono<Object>> handler = getExecutor(executorPath);
+            final Message message = RabbitMessage.fromDelivery(msj);
 
-        return defer(() -> handler.apply(message))
+            return defer(() -> handler.apply(message))
                 .transform(enrichPostProcess(message))
                 .transform(logExecution(executorPath))
                 .subscribeOn(scheduler).thenReturn(msj);
+        } catch (Exception e) {
+            log.log(Level.SEVERE, format("ATTENTION !! Outer error protection reached for %s, in Async Consumer!! Severe Warning! ", msj.getProperties().getMessageId()));
+            return Mono.error(e);
+        }
     }
 
     private Function<Mono<Object>, Mono<Object>> logExecution(String executorPath) {
@@ -102,20 +111,6 @@ public abstract class GenericMessageListener {
         };
     }
 
-    private <T> Flux<T> outerFailureProtection(Flux<T> messageFlux) {
-        return messageFlux.onErrorContinue(t -> true, (throwable, elem) -> {
-            if (elem instanceof AcknowledgableDelivery) {
-                try {
-                    String messageID = ((AcknowledgableDelivery) elem).getProperties().getMessageId();
-                    log.log(Level.SEVERE, format("ATTENTION !! Outer error protection reached for %s, in Async Consumer!! Severe Warning! ", messageID));
-                    requeueOrAck((AcknowledgableDelivery) elem, throwable).subscribe();
-                } catch (Exception e) {
-                    log.log(Level.SEVERE, "Error returning message in failure!", e);
-                }
-            }
-        });
-    }
-
     private Flux<AcknowledgableDelivery> consumeFaultTolerant(Flux<AcknowledgableDelivery> messageFlux) {
         return messageFlux.flatMap(msj ->
                         handle(msj)
@@ -128,7 +123,7 @@ public abstract class GenericMessageListener {
     protected void logError(Throwable err, AcknowledgableDelivery msj, FallbackStrategy strategy) {
         String messageID = msj.getProperties().getMessageId();
         try {
-            log.log(Level.SEVERE, format("Error encounter while processing message %s: %s", messageID, err.toString()));
+            log.log(Level.SEVERE, format("Error encounter while processing message %s: %s", messageID, err.toString()), err);
             log.warning(format("Message %s Headers: %s", messageID, msj.getProperties().getHeaders().toString()));
             log.warning(format("Message %s Body: %s", messageID, new String(msj.getBody())));
         } catch (Exception e) {
@@ -158,12 +153,15 @@ public abstract class GenericMessageListener {
     }
 
     private Mono<AcknowledgableDelivery> requeueOrAck(AcknowledgableDelivery msj, Throwable err) {
-        Long retryNumber = getRetryNumber(msj);
-        if ((msj.getEnvelope().isRedeliver() || retryNumber > 0) && useDLQRetries) {
+        final long retryNumber = getRetryNumber(msj);
+        final Message rabbitMessage = RabbitMessage.fromDelivery(msj);
+        final boolean redeliver = msj.getEnvelope().isRedeliver();
+        sendErrorToCustomReporter(err, rabbitMessage, redeliver || retryNumber > 0);
+        if ((redeliver || retryNumber > 0) && useDLQRetries) {
             if (retryNumber >= maxRetries) {
                 logError(err, msj, FallbackStrategy.DEFINITIVE_DISCARD);
                 return discardNotifier
-                        .notifyDiscard(RabbitMessage.fromDelivery(msj))
+                        .notifyDiscard(rabbitMessage)
                         .doOnSuccess(_a -> msj.ack()).thenReturn(msj);
             } else {
                 logError(err, msj, FallbackStrategy.RETRY_DLQ);
@@ -173,6 +171,17 @@ public abstract class GenericMessageListener {
         } else {
             logError(err, msj, FallbackStrategy.FAST_RETRY);
             return Mono.just(msj).delayElement(Duration.ofMillis(200)).doOnNext(m -> m.nack(true));
+        }
+    }
+
+    private void sendErrorToCustomReporter(final Throwable err, final Message message, final boolean redelivered){
+        try {
+            errorReporter.reportError(err, message, parseMessageForReporter(message), redelivered)
+                .subscribeOn(errorReporterScheduler)
+                .doOnError(t -> log.log(Level.WARNING, "Error sending error to external reporter", t))
+                .subscribe();
+        }catch (Throwable t){
+            log.log(Level.WARNING, "Error in scheduler when sending error to external reporter", t);
         }
     }
 
@@ -186,6 +195,7 @@ public abstract class GenericMessageListener {
                 .orElse(0L);
     }
 
+    protected abstract Object parseMessageForReporter(Message msj);
 }
 
 

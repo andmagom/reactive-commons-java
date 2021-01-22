@@ -12,12 +12,14 @@ import org.reactivecommons.async.impl.HandlerResolver;
 import org.reactivecommons.async.impl.RabbitMessage;
 import org.reactivecommons.async.impl.communications.ReactiveMessageListener;
 import org.reactivecommons.async.impl.communications.TopologyCreator;
+import org.reactivecommons.async.impl.ext.CustomErrorReporter;
 import reactor.core.publisher.Mono;
 import reactor.rabbitmq.AcknowledgableDelivery;
 import reactor.rabbitmq.BindingSpecification;
 import reactor.rabbitmq.ExchangeSpecification;
 import reactor.rabbitmq.QueueSpecification;
 
+import java.util.Optional;
 import java.util.function.Function;
 
 @Log
@@ -28,29 +30,31 @@ public class ApplicationCommandListener extends GenericMessageListener {
     private final String directExchange;
     private final boolean withDLQRetry;
     private final int retryDelay;
+    private final Optional<Integer> maxLengthBytes;
 
     //TODO: change large constructor parameters number
-    public ApplicationCommandListener(ReactiveMessageListener listener, String queueName, HandlerResolver resolver, String directExchange, MessageConverter messageConverter, boolean withDLQRetry, long maxRetries, int retryDelay, DiscardNotifier discardNotifier) {
-        super(queueName, listener, withDLQRetry, maxRetries, discardNotifier, "command");
+    public ApplicationCommandListener(ReactiveMessageListener listener, String queueName, HandlerResolver resolver, String directExchange, MessageConverter messageConverter, boolean withDLQRetry, long maxRetries, int retryDelay, Optional<Integer> maxLengthBytes, DiscardNotifier discardNotifier, CustomErrorReporter errorReporter) {
+        super(queueName, listener, withDLQRetry, maxRetries, discardNotifier, "command", errorReporter);
         this.retryDelay = retryDelay;
         this.withDLQRetry = withDLQRetry;
         this.resolver = resolver;
         this.directExchange = directExchange;
         this.messageConverter = messageConverter;
+        this.maxLengthBytes =maxLengthBytes;
     }
 
     protected Mono<Void> setUpBindings(TopologyCreator creator) {
         if (withDLQRetry) {
             final Mono<AMQP.Exchange.DeclareOk> declareExchange = creator.declare(ExchangeSpecification.exchange(directExchange).durable(true).type("direct"));
             final Mono<AMQP.Exchange.DeclareOk> declareExchangeDLQ = creator.declare(ExchangeSpecification.exchange(directExchange + ".DLQ").durable(true).type("direct"));
-            final Mono<AMQP.Queue.DeclareOk> declareQueue = creator.declareQueue(queueName, directExchange + ".DLQ");
-            final Mono<AMQP.Queue.DeclareOk> declareDLQ = creator.declareDLQ(queueName, directExchange, retryDelay);
+            final Mono<AMQP.Queue.DeclareOk> declareQueue = creator.declareQueue(queueName, directExchange + ".DLQ", maxLengthBytes);
+            final Mono<AMQP.Queue.DeclareOk> declareDLQ = creator.declareDLQ(queueName, directExchange, retryDelay, maxLengthBytes);
             final Mono<AMQP.Queue.BindOk> binding = creator.bind(BindingSpecification.binding(directExchange, queueName, queueName));
             final Mono<AMQP.Queue.BindOk> bindingDLQ = creator.bind(BindingSpecification.binding(directExchange + ".DLQ", queueName, queueName + ".DLQ"));
             return declareExchange.then(declareExchangeDLQ).then(declareDLQ).then(declareQueue).then(bindingDLQ).then(binding).then();
         } else {
             final Mono<AMQP.Exchange.DeclareOk> declareExchange = creator.declare(ExchangeSpecification.exchange(directExchange).durable(true).type("direct"));
-            final Mono<AMQP.Queue.DeclareOk> declareQueue = creator.declare(QueueSpecification.queue(queueName).durable(true));
+            final Mono<AMQP.Queue.DeclareOk> declareQueue = creator.declareQueue(queueName, maxLengthBytes);
             final Mono<AMQP.Queue.BindOk> binding = creator.bind(BindingSpecification.binding(directExchange, queueName, queueName));
             return declareExchange.then(declareQueue).then(binding).then();
         }
@@ -69,6 +73,11 @@ public class ApplicationCommandListener extends GenericMessageListener {
     protected String getExecutorPath(AcknowledgableDelivery msj) {
         final Command<Object> command = messageConverter.readCommandStructure(RabbitMessage.fromDelivery(msj));
         return command.getName();
+    }
+
+    @Override
+    protected Object parseMessageForReporter(Message message){
+        return messageConverter.readCommandStructure(message);
     }
 
 

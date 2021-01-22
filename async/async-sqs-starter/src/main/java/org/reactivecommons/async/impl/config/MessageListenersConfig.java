@@ -70,7 +70,13 @@ public class MessageListenersConfig {
                 .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
                         ConcurrentHashMap::putAll);
 
-        return new HandlerResolver(handlers, eventListeners, commandHandlers) {
+        final ConcurrentMap<String, RegisteredEventListener> notificationHandlers = registries
+                .values().stream()
+                .flatMap(r -> r.getEventListeners().stream())
+                .collect(ConcurrentHashMap::new, (map, handler) -> map.put(handler.getPath(), handler),
+                        ConcurrentHashMap::putAll);
+
+        return new HandlerResolver(handlers, eventListeners, commandHandlers, notificationHandlers) {
             @Override
             @SuppressWarnings("unchecked")
             public <T> RegisteredCommandHandler<T> getCommandHandler(String path) {

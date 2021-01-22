@@ -36,9 +36,21 @@ subprojects {
         testCompileOnly 'org.projectlombok:lombok'
     }
 
+    configurations.all {
 
-    jacoco {
-        toolVersion = '0.8.2'
+        resolutionStrategy.eachDependency {DependencyResolveDetails details ->
+            if (details.requested.group == 'io.projectreactor.rabbitmq'){
+                details.useVersion("${reactorRabbitVersion}")
+                details.because('Upgrade')
+            }
+        }
+    }
+
+
+    jacocoTestReport {
+        reports {
+            xml.enabled true
+        }
     }
 
     dependencyManagement {

@@ -14,11 +14,11 @@ public class HandlerResolver {
     private final Map<String, RegisteredQueryHandler> queryHandlers;
     private final Map<String, RegisteredEventListener> eventListeners;
     private final Map<String, RegisteredCommandHandler> commandHandlers;
-
+    private final Map<String, RegisteredEventListener> eventNotificationListeners;
 
     @SuppressWarnings("unchecked")
-    public <T, R> RegisteredQueryHandler<T, R> getQueryHandler(String path) {
-        return (RegisteredQueryHandler<T, R>) queryHandlers.get(path);
+    public <T, M> RegisteredQueryHandler<T, M> getQueryHandler(String path) {
+        return (RegisteredQueryHandler<T, M>) queryHandlers.get(path);
     }
 
     @SuppressWarnings("unchecked")
@@ -29,6 +29,14 @@ public class HandlerResolver {
     @SuppressWarnings("unchecked")
     public <T> RegisteredEventListener<T> getEventListener(String path) {
         return eventListeners.get(path);
+    }
+
+    public Collection<RegisteredEventListener> getNotificationListeners() {
+        return eventNotificationListeners.values();
+    }
+
+    public <T> RegisteredEventListener<T> getNotificationListener(String path) {
+        return eventNotificationListeners.get(path);
     }
 
     public Collection<RegisteredEventListener> getEventListeners() {
